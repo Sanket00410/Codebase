@@ -26,6 +26,34 @@ bandit:
     linux: bandit
   description: Python SAST scanner
 
+pylint:
+  display_name: Pylint
+  category: sast
+  supported_languages: [python]
+  install:
+    strategy: pipx
+    package: pylint
+    module: pylint
+  executable:
+    windows: pylint.exe
+    darwin: pylint
+    linux: pylint
+  description: Python linting with conservative security-rule extraction
+
+flawfinder:
+  display_name: Flawfinder
+  category: sast
+  supported_languages: [c, cpp]
+  install:
+    strategy: pipx
+    package: flawfinder
+    module: flawfinder
+  executable:
+    windows: flawfinder.exe
+    darwin: flawfinder
+    linux: flawfinder
+  description: C and C++ security analysis with CWE-linked results
+
 gitleaks:
   display_name: Gitleaks
   category: secrets
@@ -99,6 +127,34 @@ osv-scanner:
     darwin: osv-scanner
     linux: osv-scanner
   description: Dependency vulnerability scanner backed by OSV
+
+pip-audit:
+  display_name: pip-audit
+  category: sca
+  supported_languages: [python]
+  install:
+    strategy: pipx
+    package: pip-audit
+    module: pip_audit
+  executable:
+    windows: pip-audit.exe
+    darwin: pip-audit
+    linux: pip-audit
+  description: Python package vulnerability scanning against PyPI and OSV data
+
+cargo-audit:
+  display_name: cargo-audit
+  category: sca
+  supported_languages: [rust]
+  install:
+    strategy: cargo-install
+    package: cargo-audit
+    binary: cargo-audit
+  executable:
+    windows: cargo-audit.exe
+    darwin: cargo-audit
+    linux: cargo-audit
+  description: RustSec advisory scanning for Cargo.lock files
 
 syft:
   display_name: Syft

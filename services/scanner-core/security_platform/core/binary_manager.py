@@ -77,6 +77,11 @@ class BinaryManager:
             return existing
         return sorted(existing, key=self._managed_windows_candidate_priority)
 
+    def _cargo_candidates(self, tool_name: str) -> list[Path]:
+        cargo_bin = Path.home() / ".cargo" / "bin"
+        candidates = [cargo_bin / executable for executable in self._candidate_executable_names(tool_name)]
+        return [candidate for candidate in candidates if candidate.exists()]
+
     async def get_status(self, tool_name: str) -> BinaryStatus:
         override = os.getenv(self._env_override_name(tool_name))
         if override and Path(override).exists():
@@ -85,6 +90,9 @@ class BinaryManager:
         managed_candidates = self._managed_python_candidates(tool_name)
         if managed_candidates:
             return BinaryStatus(tool=tool_name, available=True, resolved_path=str(managed_candidates[0].resolve()), version=await self._read_version(managed_candidates[0]))
+        cargo_candidates = self._cargo_candidates(tool_name)
+        if cargo_candidates:
+            return BinaryStatus(tool=tool_name, available=True, resolved_path=str(cargo_candidates[0].resolve()), version=await self._read_version(cargo_candidates[0]))
         local_candidates = self._bundled_candidates(tool_name)
         if local_candidates:
             return BinaryStatus(tool=tool_name, available=True, resolved_path=str(local_candidates[0].resolve()), version=await self._read_version(local_candidates[0]))
@@ -97,6 +105,8 @@ class BinaryManager:
         strategy = self.manifests[tool_name].get("install", {}).get("strategy")
         if strategy in {"pip", "pipx"}:
             hint = "Tool is not installed. Use Install to provision it in the app-managed Python environment."
+        elif strategy == "cargo-install":
+            hint = f"Tool is not installed. Use Install to provision `{tool_name}` in the Cargo toolchain."
         elif strategy == "system":
             primary = self._executable_name(tool_name)
             hint = f"Tool is managed by the host system. Install `{Path(primary).stem}` and relaunch the desktop app."
@@ -125,6 +135,13 @@ class BinaryManager:
             return await self.get_status(tool_name)
         if strategy == "github-release":
             await self._install_from_github_release(tool_name, manifest)
+            return await self.get_status(tool_name)
+        if strategy == "cargo-install":
+            package = install_spec["package"]
+            command = ["cargo", "install", "--locked", package]
+            if install_spec.get("binary"):
+                command.extend(["--bin", install_spec["binary"]])
+            await run_command(command, self.settings.data_dir, timeout_seconds=3600)
             return await self.get_status(tool_name)
         if strategy == "system":
             status = await self.get_status(tool_name)

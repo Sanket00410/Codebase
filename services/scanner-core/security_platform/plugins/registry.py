@@ -7,12 +7,16 @@ from security_platform.core.config import settings
 from security_platform.core.models import PluginDescriptor
 from security_platform.plugins.loader import load_external_plugins
 from security_platform.plugins.bandit import BanditPlugin
+from security_platform.plugins.cargo_audit import CargoAuditPlugin
 from security_platform.plugins.checkov import CheckovPlugin
 from security_platform.plugins.detect_secrets import DetectSecretsPlugin
+from security_platform.plugins.flawfinder import FlawfinderPlugin
 from security_platform.plugins.gitleaks import GitleaksPlugin
 from security_platform.plugins.grype import GrypePlugin
 from security_platform.plugins.npm_audit import NpmAuditPlugin
 from security_platform.plugins.osv_scanner import OsvScannerPlugin
+from security_platform.plugins.pip_audit import PipAuditPlugin
+from security_platform.plugins.pylint import PylintPlugin
 from security_platform.plugins.semgrep import SemgrepPlugin
 from security_platform.plugins.syft import SyftPlugin
 from security_platform.plugins.trufflehog import TruffleHogPlugin
@@ -24,10 +28,14 @@ def built_in_plugins(binary_manager: BinaryManager):
         SyftPlugin(binary_manager),
         SemgrepPlugin(binary_manager),
         BanditPlugin(binary_manager),
+        PylintPlugin(binary_manager),
+        FlawfinderPlugin(binary_manager),
         GitleaksPlugin(binary_manager),
         DetectSecretsPlugin(binary_manager),
         CheckovPlugin(binary_manager),
         NpmAuditPlugin(binary_manager),
+        PipAuditPlugin(binary_manager),
+        CargoAuditPlugin(binary_manager),
         TrivyPlugin(binary_manager),
         OsvScannerPlugin(binary_manager),
         GrypePlugin(binary_manager),
