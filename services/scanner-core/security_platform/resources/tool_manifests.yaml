@@ -12,6 +12,26 @@ semgrep:
     linux: semgrep
   description: Multi-language static analysis with AST and taint modes
 
+actionlint:
+  display_name: actionlint
+  category: ci_cd
+  supported_languages: [yaml]
+  install:
+    strategy: github-release
+    repo: rhysd/actionlint
+    asset_patterns:
+      windows_amd64: actionlint_.*_windows_amd64\.zip
+      windows_arm64: actionlint_.*_windows_arm64\.zip
+      linux_amd64: actionlint_.*_linux_amd64\.tar\.gz
+      linux_arm64: actionlint_.*_linux_arm64\.tar\.gz
+      darwin_amd64: actionlint_.*_darwin_amd64\.tar\.gz
+      darwin_arm64: actionlint_.*_darwin_arm64\.tar\.gz
+  executable:
+    windows: actionlint.exe
+    darwin: actionlint
+    linux: actionlint
+  description: GitHub Actions workflow validation and CI/CD pipeline linting
+
 bandit:
   display_name: Bandit
   category: sast
@@ -39,6 +59,23 @@ pylint:
     darwin: pylint
     linux: pylint
   description: Python linting with conservative security-rule extraction
+
+eslint:
+  display_name: ESLint Security
+  category: sast
+  supported_languages: [javascript, typescript]
+  install:
+    strategy: npm
+    packages:
+      - eslint
+      - eslint-plugin-security
+      - "@typescript-eslint/parser"
+      - typescript
+  executable:
+    windows: eslint.cmd
+    darwin: eslint
+    linux: eslint
+  description: JavaScript and TypeScript security linting with eslint-plugin-security
 
 flawfinder:
   display_name: Flawfinder
@@ -210,6 +247,20 @@ detect-secrets:
     linux: detect-secrets
   description: File-level secret scanning with detector plugins and entropy analysis
 
+credsweeper:
+  display_name: CredSweeper
+  category: secrets
+  supported_languages: []
+  install:
+    strategy: pipx
+    package: credsweeper
+    module: credsweeper
+  executable:
+    windows: credsweeper.exe
+    darwin: credsweeper
+    linux: credsweeper
+  description: Machine-assisted secret detection with context-aware validation heuristics
+
 npm-audit:
   display_name: npm audit
   category: sca
@@ -221,6 +272,19 @@ npm-audit:
     darwin: npm
     linux: npm
   description: Registry-backed vulnerability scanning for Node.js dependencies
+
+retirejs:
+  display_name: RetireJS
+  category: sca
+  supported_languages: [javascript, typescript]
+  install:
+    strategy: npm
+    package: retire
+  executable:
+    windows: retire.cmd
+    darwin: retire
+    linux: retire
+  description: JavaScript library vulnerability scanning against RetireJS advisories
 
 trufflehog:
   display_name: TruffleHog

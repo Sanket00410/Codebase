@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import platform
 from pathlib import Path
 
 from security_platform.core.config import settings
@@ -22,8 +21,6 @@ class TruffleHogPlugin(ScannerPlugin):
     accepted_exit_codes = {0}
 
     def should_run(self, request, signal) -> bool:
-        if platform.system().lower().startswith("win"):
-            return False
         repository_path = Path(request.repository_path).expanduser()
         has_git_history = request.include_git_history and repository_has_git_history(repository_path)
         return super().should_run(request, signal) and has_git_history
@@ -32,9 +29,11 @@ class TruffleHogPlugin(ScannerPlugin):
         return [
             str(binary_path),
             "git",
-            repository_path.resolve().as_uri(),
+            _git_uri(repository_path),
             "--results=verified,unknown",
             "--json",
+            "--no-update",
+            "--log-level=-1",
         ]
 
     def parse_results(self, repository_path: Path, execution, output_path: Path | None, context: ScanExecutionContext):
@@ -43,7 +42,10 @@ class TruffleHogPlugin(ScannerPlugin):
             text = line.strip()
             if not text or not text.startswith("{"):
                 continue
-            records.append(json.loads(text))
+            record = json.loads(text)
+            if not record.get("DetectorName"):
+                continue
+            records.append(record)
 
         findings: list[NormalizedFinding] = []
         for record in records:
@@ -93,3 +95,10 @@ class TruffleHogPlugin(ScannerPlugin):
             raw_path.write_text(execution.stdout, encoding="utf-8")
             artifacts.append(ReportArtifact(kind="trufflehog-raw", path=str(raw_path), media_type="application/x-ndjson"))
         return findings, artifacts
+
+
+def _git_uri(repository_path: Path) -> str:
+    resolved = repository_path.resolve()
+    if resolved.drive:
+        return f"file://{resolved.as_posix()}"
+    return resolved.as_uri()

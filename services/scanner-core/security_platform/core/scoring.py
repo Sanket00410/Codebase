@@ -25,7 +25,8 @@ def summarize_findings(findings: list[NormalizedFinding], tools: list[ToolExecut
         category_multiplier = 1.4 if finding.category.value == "secrets" else 1.0
         penalty += base * confidence_multiplier * category_multiplier
 
-    score = max(0.0, round(100.0 - penalty, 2))
+    # Keep the score responsive without collapsing to zero after a moderate-sized scan.
+    score = round(max(0.0, min(100.0, 100.0 / (1.0 + (penalty / 90.0)))), 2)
     return ScanSummary(
         total_findings=len(findings),
         by_severity=dict(severity_counter),
@@ -33,4 +34,3 @@ def summarize_findings(findings: list[NormalizedFinding], tools: list[ToolExecut
         tools_run=[item.tool for item in tools],
         score=score,
     )
-

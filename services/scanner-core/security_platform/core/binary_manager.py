@@ -82,6 +82,17 @@ class BinaryManager:
         candidates = [cargo_bin / executable for executable in self._candidate_executable_names(tool_name)]
         return [candidate for candidate in candidates if candidate.exists()]
 
+    def _managed_node_candidates(self, tool_name: str) -> list[Path]:
+        env_dir = self.settings.tool_envs_dir / tool_name
+        if not env_dir.exists():
+            return []
+        bin_dir = env_dir / "node_modules" / ".bin"
+        candidates = [bin_dir / executable for executable in self._candidate_executable_names(tool_name)]
+        existing = [candidate for candidate in candidates if candidate.exists()]
+        if self._platform_key() != "windows":
+            return existing
+        return sorted(existing, key=self._managed_windows_candidate_priority)
+
     async def get_status(self, tool_name: str) -> BinaryStatus:
         override = os.getenv(self._env_override_name(tool_name))
         if override and Path(override).exists():
@@ -90,6 +101,9 @@ class BinaryManager:
         managed_candidates = self._managed_python_candidates(tool_name)
         if managed_candidates:
             return BinaryStatus(tool=tool_name, available=True, resolved_path=str(managed_candidates[0].resolve()), version=await self._read_version(managed_candidates[0]))
+        node_candidates = self._managed_node_candidates(tool_name)
+        if node_candidates:
+            return BinaryStatus(tool=tool_name, available=True, resolved_path=str(node_candidates[0].resolve()), version=await self._read_version(node_candidates[0]))
         cargo_candidates = self._cargo_candidates(tool_name)
         if cargo_candidates:
             return BinaryStatus(tool=tool_name, available=True, resolved_path=str(cargo_candidates[0].resolve()), version=await self._read_version(cargo_candidates[0]))
@@ -107,6 +121,8 @@ class BinaryManager:
             hint = "Tool is not installed. Use Install to provision it in the app-managed Python environment."
         elif strategy == "cargo-install":
             hint = f"Tool is not installed. Use Install to provision `{tool_name}` in the Cargo toolchain."
+        elif strategy == "npm":
+            hint = "Tool is not installed. Use Install to provision it in the app-managed Node.js environment."
         elif strategy == "system":
             primary = self._executable_name(tool_name)
             hint = f"Tool is managed by the host system. Install `{Path(primary).stem}` and relaunch the desktop app."
@@ -132,6 +148,10 @@ class BinaryManager:
         if strategy == "pip":
             package = install_spec["package"]
             await self._install_python_tool(tool_name, package)
+            return await self.get_status(tool_name)
+        if strategy == "npm":
+            packages = install_spec.get("packages") or [install_spec["package"]]
+            await self._install_node_tool(tool_name, packages)
             return await self.get_status(tool_name)
         if strategy == "github-release":
             await self._install_from_github_release(tool_name, manifest)
@@ -250,6 +270,28 @@ class BinaryManager:
         if module_name:
             self._write_python_tool_wrapper(tool_name, env_python, module_name)
 
+    async def _install_node_tool(self, tool_name: str, packages: list[str]) -> None:
+        env_dir = self.settings.tool_envs_dir / tool_name
+        env_dir.mkdir(parents=True, exist_ok=True)
+        package_json = env_dir / "package.json"
+        if not package_json.exists():
+            package_json.write_text('{"name": "%s", "private": true}\n' % f"scanner-platform-{tool_name}", encoding="utf-8")
+
+        npm_binary = shutil.which("npm.cmd" if self._platform_key() == "windows" else "npm")
+        if not npm_binary:
+            raise FileNotFoundError("npm is required to provision app-managed Node.js tools, but it was not found on PATH.")
+
+        command = [
+            npm_binary,
+            "install",
+            "--prefix",
+            str(env_dir),
+            "--no-fund",
+            "--no-audit",
+            *packages,
+        ]
+        await run_command(command, self.settings.data_dir, timeout_seconds=3600)
+
     def _venv_python(self, env_dir: Path) -> Path:
         if self._platform_key() == "windows":
             return env_dir / "Scripts" / "python.exe"
@@ -293,6 +335,7 @@ class BinaryManager:
         version_commands = (
             [str(binary_path), "--version"],
             [str(binary_path), "version"],
+            [str(binary_path), "-version"],
             [str(binary_path), "-v"],
         )
         for command in version_commands:

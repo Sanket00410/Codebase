@@ -27,10 +27,13 @@ security_platform/core/scoring.py
 security_platform/core/storage.py
 security_platform/core/utils.py
 security_platform/plugins/__init__.py
+security_platform/plugins/actionlint.py
 security_platform/plugins/bandit.py
 security_platform/plugins/cargo_audit.py
 security_platform/plugins/checkov.py
+security_platform/plugins/credsweeper.py
 security_platform/plugins/detect_secrets.py
+security_platform/plugins/eslint.py
 security_platform/plugins/flawfinder.py
 security_platform/plugins/gitleaks.py
 security_platform/plugins/grype.py
@@ -40,6 +43,7 @@ security_platform/plugins/osv_scanner.py
 security_platform/plugins/pip_audit.py
 security_platform/plugins/pylint.py
 security_platform/plugins/registry.py
+security_platform/plugins/retirejs.py
 security_platform/plugins/semgrep.py
 security_platform/plugins/syft.py
 security_platform/plugins/trivy.py

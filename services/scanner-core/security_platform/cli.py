@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--format", action="append", default=["json", "sarif", "html"])
     scan.add_argument("--offline", action="store_true")
     scan.add_argument("--update-advisories", action="store_true")
+    scan.add_argument("--no-git-history", action="store_true")
 
     install = subparsers.add_parser("install-tool", help="Install a scanner binary")
     install.add_argument("tool_name")
@@ -45,6 +46,7 @@ async def _run_scan(args) -> int:
         report_formats=args.format,
         offline=args.offline,
         update_advisories=args.update_advisories,
+        include_git_history=not args.no_git_history,
     )
     result = await orchestrator.run_scan_sync(request)
     _configure_stdout()
@@ -95,3 +97,7 @@ def main() -> None:
         raise SystemExit(asyncio.run(_update_advisories()))
     if args.command == "plugins":
         raise SystemExit(asyncio.run(_list_plugins()))
+
+
+if __name__ == "__main__":
+    main()

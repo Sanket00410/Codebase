@@ -150,6 +150,7 @@ class ScanRequest(BaseModel):
             ".pytest_cache",
             ".mypy_cache",
             ".ruff_cache",
+            ".codex-cache",
             ".next",
             ".nuxt",
             ".parcel-cache",
