@@ -1,0 +1,15 @@
+{
+  "name": "code-base-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "desktop:dev": "npm --workspace apps/desktop run dev",
+    "desktop:build": "npm --workspace apps/desktop run build",
+    "desktop:tauri": "npm --workspace apps/desktop run tauri",
+    "backend:dev": ".venv\\Scripts\\python.exe services/scanner-core/launcher.py serve --host 127.0.0.1 --port 8686",
+    "backend:scan": ".venv\\Scripts\\python.exe services/scanner-core/launcher.py scan"
+  }
+}

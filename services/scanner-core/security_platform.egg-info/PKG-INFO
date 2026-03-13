@@ -1,0 +1,26 @@
+Metadata-Version: 2.4
+Name: security-platform
+Version: 0.1.0
+Summary: Enterprise-grade local-first security scanning backend
+Author: Code Base Scanner
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.6
+Requires-Dist: uvicorn[standard]>=0.34.0
+Requires-Dist: pydantic>=2.10.5
+Requires-Dist: PyYAML>=6.0.2
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: Jinja2>=3.1.5
+Requires-Dist: reportlab>=4.2.5
+Requires-Dist: networkx>=3.4.2
+Requires-Dist: typing-extensions>=4.12.2
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.4; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.25.2; extra == "dev"
+Requires-Dist: ruff>=0.8.5; extra == "dev"
+Requires-Dist: mypy>=1.14.1; extra == "dev"
+
+# Security Platform Backend
+
+The backend exposes the local REST API, orchestrates scanners, normalizes findings, manages vulnerability data, and generates reports for the desktop shell and CLI.
+

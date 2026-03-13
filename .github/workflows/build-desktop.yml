@@ -1,0 +1,65 @@
+name: Build Desktop Packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Package backend
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pyinstaller
+          python -m pip install ./services/scanner-core
+          cd services/scanner-core
+          pyinstaller --noconfirm security-platform-backend.spec
+        shell: bash
+
+      - name: Copy backend into desktop bundle resources
+        run: |
+          mkdir -p apps/desktop/src-tauri/backend
+          if [ -f services/scanner-core/dist/security-platform-backend.exe ]; then
+            cp services/scanner-core/dist/security-platform-backend.exe apps/desktop/src-tauri/backend/security-platform-backend.exe
+          else
+            cp services/scanner-core/dist/security-platform-backend apps/desktop/src-tauri/backend/security-platform-backend
+          fi
+        shell: bash
+
+      - name: Build desktop bundles
+        run: npm --workspace apps/desktop run tauri build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: apps/desktop/src-tauri/target/release/bundle
+

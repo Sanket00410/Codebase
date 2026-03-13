@@ -1,0 +1,33 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: "20.x"
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.11"
+
+  - script: |
+      sudo apt-get update
+      sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      curl https://sh.rustup.rs -sSf | sh -s -- -y
+    displayName: Install OS prerequisites
+
+  - script: |
+      export PATH="$HOME/.cargo/bin:$PATH"
+      npm install
+      python -m pip install --upgrade pip setuptools wheel pyinstaller
+      python -m pip install ./services/scanner-core
+      ./scripts/build-backend.sh
+      npm --workspace apps/desktop run tauri build
+    displayName: Build desktop packages
+
+  - publish: apps/desktop/src-tauri/target/release/bundle
+    artifact: desktop-bundles
+

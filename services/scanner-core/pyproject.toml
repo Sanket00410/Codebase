@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "security-platform"
+version = "0.1.0"
+description = "Enterprise-grade local-first security scanning backend"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Code Base Scanner" }
+]
+dependencies = [
+  "fastapi>=0.115.6",
+  "uvicorn[standard]>=0.34.0",
+  "pydantic>=2.10.5",
+  "PyYAML>=6.0.2",
+  "httpx>=0.28.1",
+  "Jinja2>=3.1.5",
+  "reportlab>=4.2.5",
+  "networkx>=3.4.2",
+  "typing-extensions>=4.12.2"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.4",
+  "pytest-asyncio>=0.25.2",
+  "ruff>=0.8.5",
+  "mypy>=1.14.1"
+]
+
+[project.scripts]
+security-platform = "security_platform.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["security_platform*"]
+
+[tool.setuptools.package-data]
+security_platform = ["resources/*.yaml", "templates/*.j2"]

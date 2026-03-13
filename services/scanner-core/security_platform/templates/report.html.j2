@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Scan Report {{ scan.scan_id }}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f4ee;
+        --panel: #fffdf8;
+        --ink: #172033;
+        --muted: #5d6574;
+        --line: #dfd9cb;
+        --critical: #9b1c1c;
+        --high: #b54708;
+        --medium: #b08900;
+        --low: #25603d;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top right, #ffeec2, transparent 40%), var(--bg);
+        color: var(--ink);
+      }
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px;
+      }
+      .hero, .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 14px 35px rgba(19, 32, 51, 0.08);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+      .score {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #132033, #365c7c);
+        color: white;
+        font-size: 42px;
+        font-weight: 700;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+      }
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .metric strong {
+        display: block;
+        font-size: 28px;
+      }
+      h1, h2, h3 {
+        margin: 0 0 12px;
+      }
+      .findings {
+        margin-top: 24px;
+      }
+      .finding {
+        border-top: 1px solid var(--line);
+        padding: 16px 0;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .severity-critical { background: rgba(155, 28, 28, 0.12); color: var(--critical); }
+      .severity-high { background: rgba(181, 71, 8, 0.12); color: var(--high); }
+      .severity-medium { background: rgba(176, 137, 0, 0.12); color: var(--medium); }
+      .severity-low, .severity-info { background: rgba(37, 96, 61, 0.12); color: var(--low); }
+      code {
+        background: rgba(19, 32, 51, 0.06);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <h1>Scan Report</h1>
+          <p class="muted">{{ scan.repository_path }}</p>
+          <div class="grid">
+            <div class="metric">
+              <span class="muted">Findings</span>
+              <strong>{{ scan.summary.total_findings }}</strong>
+            </div>
+            <div class="metric">
+              <span class="muted">Tools Run</span>
+              <strong>{{ scan.summary.tools_run|length }}</strong>
+            </div>
+            <div class="metric">
+              <span class="muted">Languages</span>
+              <strong>{{ scan.repository_signal.languages|length }}</strong>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="score">{{ scan.summary.score }}</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Severity Distribution</h2>
+        <div class="grid">
+          {% for severity, count in scan.summary.by_severity.items() %}
+            <div class="metric">
+              <span class="muted">{{ severity }}</span>
+              <strong>{{ count }}</strong>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel findings">
+        <h2>Findings</h2>
+        {% for finding in scan.findings %}
+          <article class="finding">
+            <span class="badge severity-{{ finding.severity.value }}">{{ finding.severity.value }}</span>
+            <h3>{{ finding.title }}</h3>
+            <p>{{ finding.description }}</p>
+            <p class="muted">
+              Tool: <code>{{ finding.source_tool }}</code>
+              {% if finding.location and finding.location.path %}
+                | Location: <code>{{ finding.location.path }}:{{ finding.location.line or 1 }}</code>
+              {% endif %}
+              {% if finding.rule_id %}
+                | Rule: <code>{{ finding.rule_id }}</code>
+              {% endif %}
+              {% if finding.package_name %}
+                | Package: <code>{{ finding.package_name }}@{{ finding.package_version or "unknown" }}</code>
+              {% endif %}
+              {% if finding.fixed_version %}
+                | Fix: <code>{{ finding.fixed_version }}</code>
+              {% endif %}
+            </p>
+            {% if finding.cve_ids %}
+              <p class="muted">CVE: {{ finding.cve_ids|join(", ") }}</p>
+            {% endif %}
+            {% if finding.references %}
+              <p class="muted">References:
+                {% for reference in finding.references %}
+                  <a href="{{ reference }}">{{ reference }}</a>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              </p>
+            {% endif %}
+            {% if finding.ai_triage %}
+              <p class="muted">
+                {% if finding.ai_triage.priority %}AI priority: <code>{{ finding.ai_triage.priority }}</code>{% endif %}
+                {% if finding.ai_triage.exploitability %} | Exploitability: <code>{{ finding.ai_triage.exploitability }}</code>{% endif %}
+              </p>
+              {% if finding.ai_triage.reasoning %}
+                <p class="muted">{{ finding.ai_triage.reasoning }}</p>
+              {% endif %}
+            {% endif %}
+            {% if finding.remediation %}
+              <p><strong>Remediation:</strong> {{ finding.remediation }}</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </section>
+    </main>
+  </body>
+</html>

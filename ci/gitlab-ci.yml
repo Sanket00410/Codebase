@@ -1,0 +1,20 @@
+stages:
+  - build
+
+build_desktop:
+  stage: build
+  image: node:20-bullseye
+  before_script:
+    - apt-get update && apt-get install -y python3 python3-pip curl file build-essential libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - export PATH="$HOME/.cargo/bin:$PATH"
+    - npm install
+    - python3 -m pip install --upgrade pip setuptools wheel pyinstaller
+    - python3 -m pip install ./services/scanner-core
+  script:
+    - ./scripts/build-backend.sh
+    - npm --workspace apps/desktop run tauri build
+  artifacts:
+    paths:
+      - apps/desktop/src-tauri/target/release/bundle
+

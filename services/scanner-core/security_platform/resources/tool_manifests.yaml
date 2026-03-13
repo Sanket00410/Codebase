@@ -1,0 +1,187 @@
+semgrep:
+  display_name: Semgrep
+  category: sast
+  supported_languages: [python, javascript, typescript, go, java, csharp, kotlin, ruby, php]
+  install:
+    strategy: pipx
+    package: semgrep
+    module: semgrep
+  executable:
+    windows: semgrep.exe
+    darwin: semgrep
+    linux: semgrep
+  description: Multi-language static analysis with AST and taint modes
+
+bandit:
+  display_name: Bandit
+  category: sast
+  supported_languages: [python]
+  install:
+    strategy: pipx
+    package: bandit
+    module: bandit
+  executable:
+    windows: bandit.exe
+    darwin: bandit
+    linux: bandit
+  description: Python SAST scanner
+
+gitleaks:
+  display_name: Gitleaks
+  category: secrets
+  supported_languages: []
+  install:
+    strategy: github-release
+    repo: gitleaks/gitleaks
+    asset_patterns:
+      windows_amd64: gitleaks_.*_windows_x64\.zip
+      windows_arm64: gitleaks_.*_windows_arm64\.zip
+      linux_amd64: gitleaks_.*_linux_x64\.tar\.gz
+      linux_arm64: gitleaks_.*_linux_arm64\.tar\.gz
+      darwin_amd64: gitleaks_.*_darwin_x64\.zip
+      darwin_arm64: gitleaks_.*_darwin_arm64\.zip
+  executable:
+    windows: gitleaks.exe
+    darwin: gitleaks
+    linux: gitleaks
+  description: Git and filesystem secret detection
+
+checkov:
+  display_name: Checkov
+  category: iac
+  supported_languages: [terraform, yaml]
+  install:
+    strategy: pipx
+    package: checkov
+    module: checkov.main
+  executable:
+    windows: checkov.cmd
+    darwin: checkov
+    linux: checkov
+  description: Infrastructure as code scanner
+
+trivy:
+  display_name: Trivy
+  category: container
+  supported_languages: []
+  install:
+    strategy: github-release
+    repo: aquasecurity/trivy
+    asset_patterns:
+      windows_amd64: trivy_.*_windows-64bit\.zip
+      windows_arm64: trivy_.*_Windows-ARM64\.zip
+      linux_amd64: trivy_.*_Linux-64bit\.tar\.gz
+      linux_arm64: trivy_.*_Linux-ARM64\.tar\.gz
+      darwin_amd64: trivy_.*_macOS-64bit\.tar\.gz
+      darwin_arm64: trivy_.*_macOS-ARM64\.tar\.gz
+  executable:
+    windows: trivy.exe
+    darwin: trivy
+    linux: trivy
+  description: Vulnerability, secret, and misconfiguration scanner
+
+osv-scanner:
+  display_name: OSV-Scanner
+  category: sca
+  supported_languages: [python, javascript, typescript, java, go, rust]
+  install:
+    strategy: github-release
+    repo: google/osv-scanner
+    asset_patterns:
+      windows_amd64: osv-scanner_windows_amd64\.exe
+      windows_arm64: osv-scanner_windows_arm64\.exe
+      linux_amd64: osv-scanner_linux_amd64
+      linux_arm64: osv-scanner_linux_arm64
+      darwin_amd64: osv-scanner_darwin_amd64
+      darwin_arm64: osv-scanner_darwin_arm64
+  executable:
+    windows: osv-scanner.exe
+    darwin: osv-scanner
+    linux: osv-scanner
+  description: Dependency vulnerability scanner backed by OSV
+
+syft:
+  display_name: Syft
+  category: sbom
+  supported_languages: []
+  install:
+    strategy: github-release
+    repo: anchore/syft
+    asset_patterns:
+      windows_amd64: syft_.*_windows_amd64\.zip
+      windows_arm64: syft_.*_windows_arm64\.zip
+      linux_amd64: syft_.*_linux_amd64\.tar\.gz
+      linux_arm64: syft_.*_linux_arm64\.tar\.gz
+      darwin_amd64: syft_.*_darwin_amd64\.tar\.gz
+      darwin_arm64: syft_.*_darwin_arm64\.tar\.gz
+  executable:
+    windows: syft.exe
+    darwin: syft
+    linux: syft
+  description: SBOM generation and package inventory
+
+grype:
+  display_name: Grype
+  category: sca
+  supported_languages: []
+  install:
+    strategy: github-release
+    repo: anchore/grype
+    asset_patterns:
+      windows_amd64: grype_.*_windows_amd64\.zip
+      windows_arm64: grype_.*_windows_arm64\.zip
+      linux_amd64: grype_.*_linux_amd64\.tar\.gz
+      linux_arm64: grype_.*_linux_arm64\.tar\.gz
+      darwin_amd64: grype_.*_darwin_amd64\.tar\.gz
+      darwin_arm64: grype_.*_darwin_arm64\.tar\.gz
+  executable:
+    windows: grype.exe
+    darwin: grype
+    linux: grype
+  description: Dependency and image vulnerability scanning
+
+detect-secrets:
+  display_name: detect-secrets
+  category: secrets
+  supported_languages: []
+  install:
+    strategy: pipx
+    package: detect-secrets
+    module: detect_secrets.main
+  executable:
+    windows: detect-secrets.exe
+    darwin: detect-secrets
+    linux: detect-secrets
+  description: File-level secret scanning with detector plugins and entropy analysis
+
+npm-audit:
+  display_name: npm audit
+  category: sca
+  supported_languages: [javascript, typescript]
+  install:
+    strategy: system
+  executable:
+    windows: npm.cmd
+    darwin: npm
+    linux: npm
+  description: Registry-backed vulnerability scanning for Node.js dependencies
+
+trufflehog:
+  display_name: TruffleHog
+  category: git_history
+  supported_languages: []
+  install:
+    strategy: github-release
+    repo: trufflesecurity/trufflehog
+    asset_patterns:
+      windows_amd64: trufflehog_.*_windows_amd64\.tar\.gz
+      windows_arm64: trufflehog_.*_windows_arm64\.tar\.gz
+      linux_amd64: trufflehog_.*_linux_amd64\.tar\.gz
+      linux_arm64: trufflehog_.*_linux_arm64\.tar\.gz
+      darwin_amd64: trufflehog_.*_darwin_amd64\.tar\.gz
+      darwin_arm64: trufflehog_.*_darwin_arm64\.tar\.gz
+  executable:
+    windows: trufflehog.exe
+    darwin: trufflehog
+    linux: trufflehog
+  description: Verified and historical secret discovery across git history
