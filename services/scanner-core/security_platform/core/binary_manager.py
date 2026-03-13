@@ -171,12 +171,12 @@ class BinaryManager:
             with zipfile.ZipFile(archive_path) as archive:
                 for member in archive.infolist():
                     self._validate_archive_target(destination, member.filename)
-                archive.extractall(destination)
+                    self._extract_zip_member(archive, member, destination)
         elif archive_path.name.endswith(".tar.gz") or archive_path.suffixes[-2:] == [".tar", ".gz"]:
             with tarfile.open(archive_path, mode="r:gz") as archive:
                 for member in archive.getmembers():
                     self._validate_archive_target(destination, member.name)
-                archive.extractall(destination)
+                    self._extract_tar_member(archive, member, destination)
         else:
             executable_path = destination / executable_name
             executable_path.write_bytes(archive_path.read_bytes())
@@ -189,6 +189,29 @@ class BinaryManager:
         target = (destination / member_name).resolve()
         if destination.resolve() not in target.parents and target != destination.resolve():
             raise ValueError(f"Refusing to extract archive member outside destination: {member_name}")
+
+    def _extract_zip_member(self, archive: zipfile.ZipFile, member: zipfile.ZipInfo, destination: Path) -> None:
+        target = (destination / member.filename).resolve()
+        if member.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with archive.open(member) as source, target.open("wb") as output:
+            shutil.copyfileobj(source, output)
+
+    def _extract_tar_member(self, archive: tarfile.TarFile, member: tarfile.TarInfo, destination: Path) -> None:
+        if member.issym() or member.islnk():
+            raise ValueError(f"Refusing to extract linked archive member: {member.name}")
+        target = (destination / member.name).resolve()
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            return
+        source = archive.extractfile(member)
+        if source is None:
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source, target.open("wb") as output:
+            shutil.copyfileobj(source, output)
 
     async def update(self, tool_name: str) -> BinaryStatus:
         return await self.install(tool_name)

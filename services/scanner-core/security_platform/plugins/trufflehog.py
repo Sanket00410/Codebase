@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import platform
 from pathlib import Path
 
 from security_platform.core.config import settings
@@ -21,6 +22,8 @@ class TruffleHogPlugin(ScannerPlugin):
     accepted_exit_codes = {0}
 
     def should_run(self, request, signal) -> bool:
+        if platform.system().lower().startswith("win"):
+            return False
         repository_path = Path(request.repository_path).expanduser()
         has_git_history = request.include_git_history and repository_has_git_history(repository_path)
         return super().should_run(request, signal) and has_git_history
