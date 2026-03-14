@@ -43,6 +43,14 @@ struct SourceWindowPayload {
     error: Option<String>,
 }
 
+#[derive(Serialize)]
+struct FilePreviewPayload {
+    path: String,
+    content: String,
+    truncated: bool,
+    error: Option<String>,
+}
+
 #[tauri::command]
 fn start_backend(app: AppHandle, state: State<BackendState>) -> Result<BackendStatus, String> {
     let data_dir = runtime_data_dir(&app)?;
@@ -241,6 +249,52 @@ fn read_source_window(
         start_line,
         end_line,
         snippet,
+        error: None,
+    }
+}
+
+#[tauri::command]
+fn read_text_file_preview(path: String, max_bytes: Option<usize>, max_lines: Option<usize>) -> FilePreviewPayload {
+    let path_buf = PathBuf::from(&path);
+    let resolved_path = path_buf
+        .canonicalize()
+        .unwrap_or(path_buf.clone())
+        .to_string_lossy()
+        .to_string();
+
+    let bytes = match fs::read(&path_buf) {
+        Ok(contents) => contents,
+        Err(error) => {
+            return FilePreviewPayload {
+                path: resolved_path,
+                content: String::new(),
+                truncated: false,
+                error: Some(format!("Unable to read artifact preview: {error}")),
+            };
+        }
+    };
+
+    let byte_limit = max_bytes.unwrap_or(96_000).clamp(1_024, 1_000_000);
+    let line_limit = max_lines.unwrap_or(240).clamp(20, 2_000);
+    let truncated_by_size = bytes.len() > byte_limit;
+    let preview_bytes = if truncated_by_size { &bytes[..byte_limit] } else { &bytes[..] };
+    let preview_string = String::from_utf8_lossy(preview_bytes).replace('\0', "");
+    let mut lines: Vec<&str> = preview_string.lines().collect();
+    let truncated_by_lines = lines.len() > line_limit;
+    if truncated_by_lines {
+        lines.truncate(line_limit);
+    }
+
+    let mut content = lines.join("\n");
+    let truncated = truncated_by_size || truncated_by_lines;
+    if truncated {
+        content.push_str("\n\n... preview truncated ...");
+    }
+
+    FilePreviewPayload {
+        path: resolved_path,
+        content,
+        truncated,
         error: None,
     }
 }
@@ -548,7 +602,8 @@ pub fn run() {
             stop_backend,
             backend_status,
             open_path,
-            read_source_window
+            read_source_window,
+            read_text_file_preview
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

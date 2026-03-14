@@ -825,6 +825,19 @@ button {
   min-height: 170px;
 }
 
+.report-preview-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.report-preview-card {
+  align-content: start;
+}
+
+.report-preview-block {
+  max-height: 360px;
+}
+
 .inspector-header {
   display: grid;
   gap: 12px;

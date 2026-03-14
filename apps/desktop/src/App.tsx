@@ -100,6 +100,15 @@ type SourcePreviewState = {
   origin: "scanner" | "host" | "none";
 };
 
+type ArtifactPreviewState = {
+  path: string | null;
+  content: string;
+  loading: boolean;
+  error: string | null;
+  truncated: boolean;
+  previewable: boolean;
+};
+
 type CommandDefinition = {
   id: CommandActionId;
   label: string;
@@ -115,6 +124,13 @@ type SourceWindowResult = {
   start_line: number;
   end_line: number;
   snippet: string;
+  error?: string | null;
+};
+
+type FilePreviewResult = {
+  path: string;
+  content: string;
+  truncated: boolean;
   error?: string | null;
 };
 
@@ -742,6 +758,25 @@ function artifactDisplayLabel(artifact: Artifact | null): string {
   return artifact.label || artifact.profile_id || artifact.kind;
 }
 
+function isPreviewableArtifact(artifact: Artifact | null): boolean {
+  if (!artifact) {
+    return false;
+  }
+  const mediaType = artifact.media_type.toLowerCase();
+  const path = artifact.path.toLowerCase();
+  return (
+    mediaType.startsWith("text/") ||
+    mediaType.includes("json") ||
+    mediaType.includes("xml") ||
+    mediaType.includes("sarif") ||
+    path.endsWith(".html") ||
+    path.endsWith(".json") ||
+    path.endsWith(".md") ||
+    path.endsWith(".xml") ||
+    path.endsWith(".sarif")
+  );
+}
+
 function resolveLocationPath(scan: ScanResult | null, finding: Finding | null): string | null {
   const locationPath = finding?.location?.path;
   if (!scan || !locationPath) {
@@ -803,6 +838,7 @@ export default function App() {
   const [reportInspectorMode, setReportInspectorMode] = useState<"artifact" | "execution">("artifact");
   const [selectedReportProfileIds, setSelectedReportProfileIds] = useState<string[]>([...defaultReportProfiles]);
   const [includePlusReportVariants, setIncludePlusReportVariants] = useState(false);
+  const [openReportAfterGenerate, setOpenReportAfterGenerate] = useState(true);
   const [offlineMode, setOfflineMode] = useState(false);
   const [refreshAdvisoriesOnScan, setRefreshAdvisoriesOnScan] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
@@ -820,6 +856,14 @@ export default function App() {
     loading: false,
     error: null,
     origin: "none",
+  });
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreviewState>({
+    path: null,
+    content: "",
+    loading: false,
+    error: null,
+    truncated: false,
+    previewable: false,
   });
   const [resizeState, setResizeState] = useState<{ kind: "left" | "right" | "console"; start: number; initial: number } | null>(null);
 
@@ -1113,7 +1157,7 @@ export default function App() {
     setError(null);
     setMaintenanceMessage(null);
     try {
-      await generateReports(scan.scan_id, {
+      const generatedArtifacts = await generateReports(scan.scan_id, {
         profileIds: selectedReportProfileIds,
         includePlusVariants: includePlusReportVariants,
       });
@@ -1124,6 +1168,14 @@ export default function App() {
       if (scan) {
         const refreshedScan = await getScan(scan.scan_id);
         setScan(refreshedScan);
+      }
+      if (generatedArtifacts[0]) {
+        setSelectedArtifactPath(generatedArtifacts[0].path);
+        setReportInspectorMode("artifact");
+        setInspectorMode("context");
+        if (openReportAfterGenerate) {
+          await openTarget(generatedArtifacts[0].path);
+        }
       }
       setActiveTab("reports");
     } catch (cause) {
@@ -1267,6 +1319,18 @@ export default function App() {
     () => (scan ? scan.artifacts.filter((artifact) => artifact.kind.endsWith("-raw")) : []),
     [scan],
   );
+  const publishedReportArtifacts = useMemo(
+    () => primaryArtifacts.filter((artifact) => artifact.profile_id && !artifact.profile_id.endsWith("-plus")),
+    [primaryArtifacts],
+  );
+  const plusReportArtifacts = useMemo(
+    () => primaryArtifacts.filter((artifact) => artifact.profile_id?.endsWith("-plus")),
+    [primaryArtifacts],
+  );
+  const supportingArtifacts = useMemo(
+    () => primaryArtifacts.filter((artifact) => !artifact.profile_id),
+    [primaryArtifacts],
+  );
 
   const selectedFinding = useMemo(
     () => filteredFindings.find((finding) => finding.finding_id === selectedFindingId) || filteredFindings[0] || null,
@@ -1279,7 +1343,9 @@ export default function App() {
     filteredPlugins.find((plugin) => plugin.metadata.name === selectedPluginName) || filteredPlugins[0] || null;
   const selectedArtifact =
     (scan?.artifacts.find((artifact) => artifact.path === selectedArtifactPath) as Artifact | undefined) ||
-    primaryArtifacts[0] ||
+    publishedReportArtifacts[0] ||
+    plusReportArtifacts[0] ||
+    supportingArtifacts[0] ||
     rawArtifacts[0] ||
     null;
   const selectedExecution =
@@ -1327,7 +1393,7 @@ export default function App() {
   }, [filteredPlugins, selectedPluginName]);
 
   useEffect(() => {
-    const nextArtifacts = [...primaryArtifacts, ...rawArtifacts];
+    const nextArtifacts = [...publishedReportArtifacts, ...plusReportArtifacts, ...supportingArtifacts, ...rawArtifacts];
     if (!nextArtifacts.length) {
       setSelectedArtifactPath(null);
       return;
@@ -1335,7 +1401,7 @@ export default function App() {
     if (!selectedArtifactPath || !nextArtifacts.some((artifact) => artifact.path === selectedArtifactPath)) {
       setSelectedArtifactPath(nextArtifacts[0].path);
     }
-  }, [primaryArtifacts, rawArtifacts, selectedArtifactPath]);
+  }, [plusReportArtifacts, publishedReportArtifacts, rawArtifacts, selectedArtifactPath, supportingArtifacts]);
 
   useEffect(() => {
     if (!scan?.tools.length) {
@@ -1456,6 +1522,77 @@ export default function App() {
       cancelled = true;
     };
   }, [selectedFinding, selectedFindingPath]);
+
+  useEffect(() => {
+    if (!selectedArtifact) {
+      setArtifactPreview({
+        path: null,
+        content: "",
+        loading: false,
+        error: null,
+        truncated: false,
+        previewable: false,
+      });
+      return;
+    }
+    if (!isPreviewableArtifact(selectedArtifact)) {
+      setArtifactPreview({
+        path: selectedArtifact.path,
+        content: "",
+        loading: false,
+        error: "Inline preview is available for text, HTML, JSON, SARIF, Markdown, and XML artifacts.",
+        truncated: false,
+        previewable: false,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setArtifactPreview({
+      path: selectedArtifact.path,
+      content: "",
+      loading: true,
+      error: null,
+      truncated: false,
+      previewable: true,
+    });
+
+    void invoke<FilePreviewResult>("read_text_file_preview", {
+      path: selectedArtifact.path,
+      maxBytes: 96_000,
+      maxLines: 240,
+    })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setArtifactPreview({
+          path: result.path,
+          content: result.content,
+          loading: false,
+          error: result.error || null,
+          truncated: result.truncated,
+          previewable: true,
+        });
+      })
+      .catch((cause) => {
+        if (cancelled) {
+          return;
+        }
+        setArtifactPreview({
+          path: selectedArtifact.path,
+          content: "",
+          loading: false,
+          error: cause instanceof Error ? cause.message : String(cause),
+          truncated: false,
+          previewable: true,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedArtifact]);
 
   const commandRegistry: Record<CommandActionId, CommandDefinition> = {
       "open-repository": {
@@ -2337,6 +2474,14 @@ export default function App() {
             />
             Include plus variants with richer evidence
           </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={openReportAfterGenerate}
+              onChange={(event) => setOpenReportAfterGenerate(event.target.checked)}
+            />
+            Open the first generated report automatically
+          </label>
           <button className="button ghost button-inline" onClick={() => setSelectedReportProfileIds([...defaultReportProfiles])}>
             Select defaults
           </button>
@@ -2382,24 +2527,38 @@ export default function App() {
         </div>
         {reportInspectorMode === "artifact" ? (
           selectedArtifact ? (
-            <div className="summary-grid">
-              <article className="summary-card">
-                <span className="detail-label">Artifact</span>
-                <strong>{artifactDisplayLabel(selectedArtifact)}</strong>
-                <p>{selectedArtifact.description || selectedArtifact.kind}</p>
-              </article>
-              <article className="summary-card">
-                <span className="detail-label">Media type</span>
-                <strong>{selectedArtifact.media_type}</strong>
-                <p>{selectedArtifact.path}</p>
-              </article>
-              <article className="summary-card">
-                <span className="detail-label">Action</span>
-                <strong>Open artifact</strong>
-                <p>Launch the selected report or raw payload in the desktop shell.</p>
-                <button className="button secondary button-inline" onClick={() => dispatchCommand("open-selected-artifact")}>
-                  Open selected artifact
-                </button>
+            <div className="report-preview-stack">
+              <div className="summary-grid">
+                <article className="summary-card">
+                  <span className="detail-label">Artifact</span>
+                  <strong>{artifactDisplayLabel(selectedArtifact)}</strong>
+                  <p>{selectedArtifact.description || selectedArtifact.kind}</p>
+                </article>
+                <article className="summary-card">
+                  <span className="detail-label">Media type</span>
+                  <strong>{selectedArtifact.media_type}</strong>
+                  <p>{selectedArtifact.path}</p>
+                </article>
+                <article className="summary-card">
+                  <span className="detail-label">Action</span>
+                  <strong>Open artifact</strong>
+                  <p>Launch the selected report or raw payload in the desktop shell.</p>
+                  <button className="button secondary button-inline" onClick={() => dispatchCommand("open-selected-artifact")}>
+                    Open selected artifact
+                  </button>
+                </article>
+              </div>
+              <article className="summary-card report-preview-card">
+                <span className="detail-label">Inline preview</span>
+                <strong>{artifactPreview.path ? compactPath(artifactPreview.path) : "No preview loaded"}</strong>
+                {artifactPreview.loading ? <p>Loading artifact preview from the desktop host...</p> : null}
+                {!artifactPreview.loading && artifactPreview.error ? <p>{artifactPreview.error}</p> : null}
+                {!artifactPreview.loading && !artifactPreview.error && artifactPreview.content ? (
+                  <>
+                    {artifactPreview.truncated ? <p>Preview truncated for readability.</p> : null}
+                    <pre className="code-block limited-block report-preview-block">{artifactPreview.content}</pre>
+                  </>
+                ) : null}
               </article>
             </div>
           ) : (
@@ -2452,8 +2611,8 @@ export default function App() {
         <div className="dual-grid">
           <div className="artifact-grid">
             <h4 className="subsection-title">Published reports</h4>
-            {primaryArtifacts.length ? (
-              primaryArtifacts.map((artifact) => (
+            {publishedReportArtifacts.length ? (
+              publishedReportArtifacts.map((artifact) => (
                 <button
                   key={artifact.path}
                   className={`tile-card ${selectedArtifact?.path === artifact.path ? "active" : ""}`}
@@ -2470,6 +2629,61 @@ export default function App() {
               ))
             ) : (
               <div className="empty-inline">No published reports are available for the active scan.</div>
+            )}
+          </div>
+          <div className="artifact-grid">
+            <h4 className="subsection-title">Plus variants</h4>
+            {plusReportArtifacts.length ? (
+              plusReportArtifacts.map((artifact) => (
+                <button
+                  key={artifact.path}
+                  className={`tile-card ${selectedArtifact?.path === artifact.path ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedArtifactPath(artifact.path);
+                    setReportInspectorMode("artifact");
+                    setInspectorMode("context");
+                  }}
+                >
+                  <span className="detail-label">{artifact.profile_id || artifact.kind}</span>
+                  <strong>{artifactDisplayLabel(artifact)}</strong>
+                  <p>{artifact.description || artifact.media_type}</p>
+                </button>
+              ))
+            ) : (
+              <div className="empty-inline">No plus variants have been generated for the active scan.</div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel work-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Supporting Outputs</span>
+            <h3>Raw payloads and generated support files</h3>
+          </div>
+        </div>
+        <div className="dual-grid">
+          <div className="artifact-grid">
+            <h4 className="subsection-title">Supporting artifacts</h4>
+            {supportingArtifacts.length ? (
+              supportingArtifacts.map((artifact) => (
+                <button
+                  key={artifact.path}
+                  className={`tile-card ${selectedArtifact?.path === artifact.path ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedArtifactPath(artifact.path);
+                    setReportInspectorMode("artifact");
+                    setInspectorMode("context");
+                  }}
+                >
+                  <span className="detail-label">{artifact.profile_id || artifact.kind}</span>
+                  <strong>{artifactDisplayLabel(artifact)}</strong>
+                  <p>{artifact.description || artifact.media_type}</p>
+                </button>
+              ))
+            ) : (
+              <div className="empty-inline">No non-report support artifacts are attached to this scan.</div>
             )}
           </div>
           <div className="artifact-grid">
