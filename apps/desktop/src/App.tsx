@@ -5,14 +5,18 @@ import { listen } from "@tauri-apps/api/event";
 
 import {
   createScan,
+  defaultReportProfiles,
+  generateReports,
   getPlugins,
   getScan,
   health,
   installTool,
+  listReportProfiles,
   listResults,
   updateAdvisories,
   type Finding,
   type PluginDescriptor,
+  type ReportProfileDefinition,
   type ScanResult,
 } from "./lib/api";
 
@@ -32,6 +36,7 @@ type InspectorMode = (typeof inspectorModes)[number];
 type Artifact = ScanResult["artifacts"][number];
 type ToolExecution = ScanResult["tools"][number];
 type DependencyNode = ScanResult["dependency_graph"]["nodes"][number];
+type ReportProfile = ReportProfileDefinition;
 
 type MenuItem = {
   label: string;
@@ -603,14 +608,19 @@ function renderReportsInspector({
         <div className="section-heading">
           <div>
             <span className="eyebrow">Artifact</span>
-            <h3>{compactPath(artifact.path)}</h3>
+            <h3>{artifactDisplayLabel(artifact)}</h3>
           </div>
-          <span className="meta-chip">{artifact.kind}</span>
+          <span className="meta-chip">{artifact.profile_id || artifact.kind}</span>
         </div>
         <div className="summary-grid single-column">
           <article className="summary-card">
             <span className="detail-label">Media type</span>
             <strong>{artifact.media_type}</strong>
+            <p>{artifact.description || artifact.path}</p>
+          </article>
+          <article className="summary-card">
+            <span className="detail-label">Output path</span>
+            <strong>{compactPath(artifact.path)}</strong>
             <p>{artifact.path}</p>
           </article>
         </div>
@@ -725,6 +735,13 @@ function clipText(value: string | undefined | null, limit = 180): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
 }
 
+function artifactDisplayLabel(artifact: Artifact | null): string {
+  if (!artifact) {
+    return "No artifact selected";
+  }
+  return artifact.label || artifact.profile_id || artifact.kind;
+}
+
 function resolveLocationPath(scan: ScanResult | null, finding: Finding | null): string | null {
   const locationPath = finding?.location?.path;
   if (!scan || !locationPath) {
@@ -771,6 +788,7 @@ export default function App() {
   const [backendReady, setBackendReady] = useState(false);
   const [repositoryPath, setRepositoryPath] = useState("");
   const [plugins, setPlugins] = useState<PluginDescriptor[]>([]);
+  const [reportProfiles, setReportProfiles] = useState<ReportProfile[]>([]);
   const [recentScans, setRecentScans] = useState<ScanResult[]>([]);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -783,10 +801,13 @@ export default function App() {
   const [selectedArtifactPath, setSelectedArtifactPath] = useState<string | null>(null);
   const [selectedExecutionTool, setSelectedExecutionTool] = useState<string | null>(null);
   const [reportInspectorMode, setReportInspectorMode] = useState<"artifact" | "execution">("artifact");
+  const [selectedReportProfileIds, setSelectedReportProfileIds] = useState<string[]>([...defaultReportProfiles]);
+  const [includePlusReportVariants, setIncludePlusReportVariants] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
   const [refreshAdvisoriesOnScan, setRefreshAdvisoriesOnScan] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingReports, setGeneratingReports] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -949,9 +970,10 @@ export default function App() {
     }));
 
   const refreshState = async () => {
-    const [pluginData, resultData] = await Promise.all([getPlugins(), listResults()]);
+    const [pluginData, resultData, profileData] = await Promise.all([getPlugins(), listResults(), listReportProfiles()]);
     setPlugins(pluginData);
     setRecentScans(resultData);
+    setReportProfiles(profileData);
     if (scan) {
       const matching = resultData.find((item) => item.scan_id === scan.scan_id);
       if (matching) {
@@ -995,6 +1017,7 @@ export default function App() {
       const queued = await createScan(repositoryPath, {
         offline: offlineMode,
         updateAdvisories: refreshAdvisoriesOnScan,
+        includePlusReportVariants,
       });
       setScan(queued);
       setActiveTab("dashboard");
@@ -1068,6 +1091,45 @@ export default function App() {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleReportProfile = (profileId: string) => {
+    setSelectedReportProfileIds((current) =>
+      current.includes(profileId) ? current.filter((value) => value !== profileId) : [...current, profileId],
+    );
+  };
+
+  const generateSelectedReports = async () => {
+    if (!scan) {
+      setError("Load or run a scan before generating reports.");
+      return;
+    }
+    if (!selectedReportProfileIds.length) {
+      setError("Select at least one report profile before generating reports.");
+      return;
+    }
+    setGeneratingReports(true);
+    setError(null);
+    setMaintenanceMessage(null);
+    try {
+      await generateReports(scan.scan_id, {
+        profileIds: selectedReportProfileIds,
+        includePlusVariants: includePlusReportVariants,
+      });
+      setMaintenanceMessage(
+        `Generated ${selectedReportProfileIds.length} report profile${selectedReportProfileIds.length === 1 ? "" : "s"}${includePlusReportVariants ? " with plus variants." : "."}`,
+      );
+      await refreshState();
+      if (scan) {
+        const refreshedScan = await getScan(scan.scan_id);
+        setScan(refreshedScan);
+      }
+      setActiveTab("reports");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setGeneratingReports(false);
     }
   };
 
@@ -1284,6 +1346,16 @@ export default function App() {
       setSelectedExecutionTool(scan.tools[0].tool);
     }
   }, [scan, selectedExecutionTool]);
+
+  useEffect(() => {
+    if (!reportProfiles.length) {
+      return;
+    }
+    setSelectedReportProfileIds((current) => {
+      const valid = current.filter((profileId) => reportProfiles.some((profile) => profile.id === profileId));
+      return valid.length ? valid : reportProfiles.map((profile) => profile.id);
+    });
+  }, [reportProfiles]);
 
   useEffect(() => {
     if (!selectedFinding?.package_name || !dependencyNodes.length) {
@@ -2240,6 +2312,70 @@ export default function App() {
       <section className="panel work-card">
         <div className="section-heading">
           <div>
+            <span className="eyebrow">Report Generation</span>
+            <h3>traditional report, modern report, executive summary, machine-readable JSON, SARIF, Markdown, PDF, XML</h3>
+            <p className="body-copy">
+              Generate the report set you want for this scan, and optionally add plus variants with richer evidence:
+              raw scanner output, source snippets, file/line evidence, dependency/package evidence, CVE/CWE/CVSS,
+              remediation, and AI triage.
+            </p>
+          </div>
+          <button
+            className="button primary"
+            disabled={!scan || !selectedReportProfileIds.length || generatingReports}
+            onClick={() => void generateSelectedReports()}
+          >
+            {generatingReports ? "Generating..." : "Generate selected reports"}
+          </button>
+        </div>
+        <div className="toggle-row">
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={includePlusReportVariants}
+              onChange={(event) => setIncludePlusReportVariants(event.target.checked)}
+            />
+            Include plus variants with richer evidence
+          </label>
+          <button className="button ghost button-inline" onClick={() => setSelectedReportProfileIds([...defaultReportProfiles])}>
+            Select defaults
+          </button>
+          <button className="button ghost button-inline" onClick={() => setSelectedReportProfileIds(reportProfiles.map((profile) => profile.id))}>
+            Select all
+          </button>
+          <button className="button ghost button-inline" onClick={() => setSelectedReportProfileIds([])}>
+            Clear selection
+          </button>
+        </div>
+        <div className="plugin-grid report-profile-grid">
+          {reportProfiles.length ? (
+            reportProfiles.map((profile) => {
+              const selected = selectedReportProfileIds.includes(profile.id);
+              return (
+                <button
+                  key={profile.id}
+                  className={`tile-card report-profile-card ${selected ? "active" : ""}`}
+                  onClick={() => toggleReportProfile(profile.id)}
+                >
+                  <span className="detail-label">{profile.label}</span>
+                  <strong>{profile.extension.toUpperCase()}</strong>
+                  <p>{profile.description}</p>
+                  <div className="pill-row">
+                    <span className="meta-chip">{profile.media_type}</span>
+                    {profile.supports_rich_evidence ? <span className="meta-chip">plus ready</span> : null}
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div className="empty-inline">Loading report profiles from the backend runtime.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="panel work-card">
+        <div className="section-heading">
+          <div>
             <span className="eyebrow">Selected Output</span>
             <h3>{reportInspectorMode === "artifact" ? "Artifact preview" : "Execution preview"}</h3>
           </div>
@@ -2249,8 +2385,8 @@ export default function App() {
             <div className="summary-grid">
               <article className="summary-card">
                 <span className="detail-label">Artifact</span>
-                <strong>{compactPath(selectedArtifact.path)}</strong>
-                <p>{selectedArtifact.kind}</p>
+                <strong>{artifactDisplayLabel(selectedArtifact)}</strong>
+                <p>{selectedArtifact.description || selectedArtifact.kind}</p>
               </article>
               <article className="summary-card">
                 <span className="detail-label">Media type</span>
@@ -2327,9 +2463,9 @@ export default function App() {
                     setInspectorMode("context");
                   }}
                 >
-                  <span className="detail-label">{artifact.kind}</span>
-                  <strong>{compactPath(artifact.path)}</strong>
-                  <p>{artifact.media_type}</p>
+                  <span className="detail-label">{artifact.profile_id || artifact.kind}</span>
+                  <strong>{artifactDisplayLabel(artifact)}</strong>
+                  <p>{artifact.description || artifact.media_type}</p>
                 </button>
               ))
             ) : (
@@ -2349,9 +2485,9 @@ export default function App() {
                     setInspectorMode("context");
                   }}
                 >
-                  <span className="detail-label">{artifact.kind}</span>
-                  <strong>{compactPath(artifact.path)}</strong>
-                  <p>{artifact.media_type}</p>
+                  <span className="detail-label">{artifact.profile_id || artifact.kind}</span>
+                  <strong>{artifactDisplayLabel(artifact)}</strong>
+                  <p>{artifact.description || artifact.media_type}</p>
                 </button>
               ))
             ) : (

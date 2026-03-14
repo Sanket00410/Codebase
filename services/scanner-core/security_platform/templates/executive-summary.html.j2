@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ report.profile.label|title }} - {{ report.scan.scan_id }}</title>
+    <style>
+      body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #eef2f7; color: #152135; }
+      main { max-width: 1040px; margin: 0 auto; padding: 30px; }
+      .hero, .panel { background: white; border: 1px solid #d7dee8; border-radius: 20px; padding: 22px; margin-bottom: 18px; box-shadow: 0 12px 32px rgba(21, 33, 53, 0.08); }
+      .hero { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+      .score { width: 128px; height: 128px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #173552, #356385); color: white; font-size: 42px; font-weight: 800; }
+      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+      .metric { border: 1px solid #d7dee8; border-radius: 14px; padding: 14px; background: #f8fbfe; }
+      .metric strong { display: block; font-size: 28px; margin-top: 6px; }
+      .risk { border-top: 1px solid #d7dee8; padding: 12px 0; }
+      .code { white-space: pre-wrap; background: #0f1722; color: #dfe8f3; padding: 14px; border-radius: 14px; overflow: auto; font-family: Consolas, monospace; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <h1>{{ report.profile.label|title }}</h1>
+          <p>{{ report.executive_summary.headline }}</p>
+          <p>Repository: {{ report.scan.repository_path }}</p>
+          <div class="grid">
+            <div class="metric"><span>Security score</span><strong>{{ report.summary.security_score }}</strong></div>
+            <div class="metric"><span>Total findings</span><strong>{{ report.summary.total_findings }}</strong></div>
+            <div class="metric"><span>Critical + high</span><strong>{{ report.executive_summary.critical_and_high }}</strong></div>
+            <div class="metric"><span>Tools run</span><strong>{{ report.summary.tools_run|length }}</strong></div>
+          </div>
+        </div>
+        <div>
+          <div class="score">{{ report.summary.security_score }}</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Top risks</h2>
+        {% for risk in report.executive_summary.top_risks %}
+          <div class="risk">
+            <strong>{{ risk.title }}</strong>
+            <p>{{ risk.severity }} via {{ risk.tool }}{% if risk.location and risk.location != "n/a" %} at {{ risk.location }}{% endif %}</p>
+            {% if risk.package %}<p>Dependency/package evidence: {{ risk.package }}</p>{% endif %}
+          </div>
+        {% endfor %}
+      </section>
+
+      <section class="panel">
+        <h2>Repository shape</h2>
+        <div class="grid">
+          <div class="metric"><span>Languages</span><strong>{{ report.executive_summary.repository_shape.languages|length }}</strong></div>
+          <div class="metric"><span>CI files</span><strong>{{ report.executive_summary.repository_shape.ci_files|length }}</strong></div>
+          <div class="metric"><span>Docker files</span><strong>{{ report.executive_summary.repository_shape.docker_files|length }}</strong></div>
+          <div class="metric"><span>Terraform files</span><strong>{{ report.executive_summary.repository_shape.terraform_files|length }}</strong></div>
+        </div>
+      </section>
+
+      {% if report.profile.includes_rich_evidence %}
+        <section class="panel">
+          <h2>Rich evidence appendix</h2>
+          {% for finding in report.findings[:10] %}
+            <div class="risk">
+              <strong>{{ finding.title }}</strong>
+              <p>File/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</p>
+              {% if finding.package %}<p>Dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</p>{% endif %}
+              {% if finding.rich_evidence and finding.rich_evidence.remediation %}<p>Remediation: {{ finding.rich_evidence.remediation }}</p>{% endif %}
+              {% if finding.rich_evidence and finding.rich_evidence.ai_triage %}<p>AI triage: {{ finding.rich_evidence.ai_triage }}</p>{% endif %}
+              {% if finding.rich_evidence and finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
+                <div class="code">{{ finding.rich_evidence.source_snippets.snippet }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

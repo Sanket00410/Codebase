@@ -44,7 +44,14 @@ export interface ScanResult {
   progress_percent: number;
   active_tools: string[];
   findings: Finding[];
-  artifacts: { kind: string; path: string; media_type: string }[];
+  artifacts: {
+    kind: string;
+    path: string;
+    media_type: string;
+    profile_id?: string | null;
+    label?: string | null;
+    description?: string | null;
+  }[];
   errors: string[];
   summary: {
     total_findings: number;
@@ -98,10 +105,36 @@ export interface PluginDescriptor {
   } | null;
 }
 
+export interface ReportProfileDefinition {
+  id: string;
+  label: string;
+  description: string;
+  media_type: string;
+  extension: string;
+  supports_rich_evidence: boolean;
+}
+
 export interface ScanOptions {
   offline?: boolean;
   updateAdvisories?: boolean;
+  includePlusReportVariants?: boolean;
 }
+
+export interface GenerateReportOptions {
+  profileIds: string[];
+  includePlusVariants?: boolean;
+}
+
+export const defaultReportProfiles = [
+  "traditional-report",
+  "modern-report",
+  "executive-summary",
+  "machine-readable-json",
+  "sarif",
+  "markdown",
+  "pdf",
+  "xml",
+] as const;
 
 const API_ROOT = "http://127.0.0.1:8686";
 
@@ -147,10 +180,25 @@ export async function createScan(repositoryPath: string, options: ScanOptions = 
     method: "POST",
     body: JSON.stringify({
       repository_path: repositoryPath,
-      report_formats: ["json", "sarif", "html", "md", "pdf"],
+      report_profiles: [...defaultReportProfiles],
+      include_plus_report_variants: options.includePlusReportVariants ?? false,
       update_advisories: options.updateAdvisories ?? false,
       offline: options.offline ?? false,
       include_git_history: true,
+    }),
+  });
+}
+
+export async function listReportProfiles(): Promise<ReportProfileDefinition[]> {
+  return request("/report-profiles");
+}
+
+export async function generateReports(scanId: string, options: GenerateReportOptions) {
+  return request<ScanResult["artifacts"]>(`/reports/${scanId}/generate`, {
+    method: "POST",
+    body: JSON.stringify({
+      profile_ids: options.profileIds,
+      include_plus_variants: options.includePlusVariants ?? false,
     }),
   });
 }

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ report.profile.label|title }} - {{ report.scan.scan_id }}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f3ea;
+        --panel: rgba(255, 252, 246, 0.96);
+        --ink: #152135;
+        --muted: #5f6980;
+        --line: #ddd4c4;
+        --accent: #d8a53b;
+        --accent-2: #173552;
+        --ok: #225d45;
+        --warn: #996d00;
+        --danger: #8b2626;
+      }
+      body { margin: 0; font-family: "IBM Plex Sans", "Segoe UI", sans-serif; background: radial-gradient(circle at top right, #f3d486, transparent 30%), radial-gradient(circle at left, #d5ecff, transparent 20%), var(--bg); color: var(--ink); }
+      main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: 0 16px 38px rgba(21, 33, 53, 0.08); margin-bottom: 18px; }
+      .hero { display: grid; gap: 20px; grid-template-columns: 2fr 1fr; }
+      .score { width: 132px; height: 132px; border-radius: 50%; background: linear-gradient(135deg, var(--accent-2), #365c7c); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 800; }
+      .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+      .metric, .finding, .tool { border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.65); padding: 16px; }
+      .metric strong { display: block; font-size: 28px; margin-top: 6px; }
+      .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+      h1, h2, h3, p { margin-top: 0; }
+      .badge { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+      .critical, .high { color: var(--danger); background: rgba(139, 38, 38, 0.12); }
+      .medium { color: var(--warn); background: rgba(153, 109, 0, 0.12); }
+      .low, .info { color: var(--ok); background: rgba(34, 93, 69, 0.12); }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+      .chip { display: inline-flex; padding: 4px 10px; border-radius: 999px; background: rgba(23, 53, 82, 0.08); font-size: 12px; }
+      .code { white-space: pre-wrap; background: #0f1722; color: #dfe8f3; padding: 14px; border-radius: 14px; overflow: auto; font-family: "IBM Plex Mono", Consolas, monospace; font-size: 12px; }
+      .summary-list { margin: 0; padding-left: 18px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <div class="eyebrow">{{ report.profile.label }}</div>
+          <h1>{{ report.executive_summary.headline }}</h1>
+          <p>{{ report.scan.repository_path }}</p>
+          <div class="grid">
+            <div class="metric"><span class="eyebrow">Findings</span><strong>{{ report.summary.total_findings }}</strong></div>
+            <div class="metric"><span class="eyebrow">Critical + high</span><strong>{{ report.executive_summary.critical_and_high }}</strong></div>
+            <div class="metric"><span class="eyebrow">Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
+            <div class="metric"><span class="eyebrow">Tools run</span><strong>{{ report.summary.tools_run|length }}</strong></div>
+          </div>
+        </div>
+        <div>
+          <div class="score">{{ report.summary.security_score }}</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="eyebrow">Top risks</div>
+        <h2>Repository risk brief</h2>
+        <ul class="summary-list">
+          {% for risk in report.executive_summary.top_risks %}
+            <li>{{ risk.title }} ({{ risk.severity }}) via {{ risk.tool }}{% if risk.location and risk.location != "n/a" %} at {{ risk.location }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="panel">
+        <div class="eyebrow">Findings</div>
+        <h2>Analyst review</h2>
+        <div class="grid">
+          {% for finding in report.findings %}
+            <article class="finding">
+              <span class="badge {{ finding.severity }}">{{ finding.severity }}</span>
+              <h3>{{ finding.title }}</h3>
+              <p>{{ finding.description }}</p>
+              <div class="chips">
+                <span class="chip">{{ finding.source_tool }}</span>
+                <span class="chip">{{ finding.category }}</span>
+                <span class="chip">file/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</span>
+                {% if finding.package %}<span class="chip">dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</span>{% endif %}
+                {% if finding.cve_ids %}<span class="chip">CVE/CWE/CVSS: {{ finding.cve_ids|join(", ") }}</span>{% endif %}
+              </div>
+              {% if report.profile.includes_rich_evidence and finding.rich_evidence %}
+                {% if finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
+                  <h3>Source snippets</h3>
+                  <div class="code">{{ finding.rich_evidence.source_snippets.snippet }}</div>
+                {% endif %}
+                {% if finding.rich_evidence.remediation %}
+                  <h3>Remediation</h3>
+                  <p>{{ finding.rich_evidence.remediation }}</p>
+                {% endif %}
+                {% if finding.rich_evidence.ai_triage %}
+                  <h3>AI triage</h3>
+                  <p>{{ finding.rich_evidence.ai_triage }}</p>
+                {% endif %}
+                {% if finding.rich_evidence.raw_scanner_output %}
+                  <h3>Raw scanner output</h3>
+                  <div class="code">{{ finding.rich_evidence.raw_scanner_output.stdout_excerpt or finding.rich_evidence.raw_scanner_output.stderr_excerpt or "" }}</div>
+                {% endif %}
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% if report.profile.includes_rich_evidence and report.tool_outputs %}
+        <section class="panel">
+          <div class="eyebrow">Raw scanner output</div>
+          <h2>Tool execution detail</h2>
+          <div class="grid">
+            {% for tool in report.tool_outputs %}
+              <article class="tool">
+                <h3>{{ tool.tool }}</h3>
+                <p>Exit {{ tool.exit_code }} in {{ tool.duration_seconds }}s</p>
+                {% if tool.command %}<p><strong>Command:</strong> {{ tool.command|join(" ") }}</p>{% endif %}
+                {% if tool.stdout %}<div class="code">{{ tool.stdout }}</div>{% endif %}
+                {% if tool.stderr %}<div class="code">{{ tool.stderr }}</div>{% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

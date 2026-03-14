@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ report.profile.label|title }} - {{ report.scan.scan_id }}</title>
+    <style>
+      body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f4f6f8; color: #1d2733; }
+      main { max-width: 1160px; margin: 0 auto; padding: 28px; }
+      .panel { background: white; border: 1px solid #d8dee6; margin-bottom: 18px; box-shadow: 0 8px 20px rgba(29, 39, 51, 0.08); }
+      .panel > div { padding: 18px 20px; }
+      .header { background: #0f1722; color: white; }
+      h1, h2, h3, p { margin-top: 0; }
+      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+      .metric { border: 1px solid #d8dee6; padding: 12px; background: #f8fafc; }
+      .metric strong { display: block; font-size: 26px; margin-top: 6px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 10px 8px; border-top: 1px solid #d8dee6; vertical-align: top; text-align: left; }
+      th { background: #eef2f6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+      .severity { font-weight: 700; text-transform: uppercase; }
+      .severity-critical, .severity-high { color: #a61b1b; }
+      .severity-medium { color: #8c5a00; }
+      .severity-low, .severity-info { color: #1f6a49; }
+      .code { white-space: pre-wrap; background: #111827; color: #e5edf7; padding: 12px; border-radius: 10px; overflow: auto; font-family: Consolas, monospace; font-size: 12px; }
+      .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #e9eef6; margin-right: 6px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <div class="header">
+          <h1>{{ report.profile.label|title }}</h1>
+          <p>{{ report.executive_summary.headline }}</p>
+          <p>Repository: {{ report.scan.repository_path }}</p>
+        </div>
+        <div class="grid">
+          <div class="metric"><span>Security score</span><strong>{{ report.summary.security_score }}</strong></div>
+          <div class="metric"><span>Total findings</span><strong>{{ report.summary.total_findings }}</strong></div>
+          <div class="metric"><span>Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
+          <div class="metric"><span>Tools run</span><strong>{{ report.summary.tools_run|length }}</strong></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>Severity Distribution</h2>
+          <div class="grid">
+            {% for severity, count in report.summary.severity_distribution.items() %}
+              <div class="metric"><span>{{ severity }}</span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>Findings Ledger</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Severity</th>
+                <th>Finding</th>
+                <th>Tool</th>
+                <th>File/Line Evidence</th>
+                <th>Dependency/Package Evidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for finding in report.findings %}
+                <tr>
+                  <td class="severity severity-{{ finding.severity }}">{{ finding.severity }}</td>
+                  <td>
+                    <strong>{{ finding.title }}</strong>
+                    <div>{{ finding.description }}</div>
+                    {% if finding.cve_ids %}<div>CVE/CWE/CVSS: {{ finding.cve_ids|join(", ") }}</div>{% endif %}
+                    {% if finding.cwe_ids %}<div>{{ finding.cwe_ids|join(", ") }}</div>{% endif %}
+                  </td>
+                  <td>{{ finding.source_tool }}</td>
+                  <td>
+                    {% if finding.location %}
+                      {{ finding.location.path }}{% if finding.location.line %}:{{ finding.location.line }}{% endif %}
+                    {% else %}
+                      n/a
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if finding.package %}
+                      {{ finding.package.name }}@{{ finding.package.version or "unknown" }}
+                    {% else %}
+                      n/a
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if report.profile.includes_rich_evidence and finding.rich_evidence %}
+                  <tr>
+                    <td colspan="5">
+                      {% if finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
+                        <h3>Source snippets</h3>
+                        <div class="code">{{ finding.rich_evidence.source_snippets.snippet }}</div>
+                      {% endif %}
+                      {% if finding.rich_evidence.remediation %}
+                        <h3>Remediation</h3>
+                        <p>{{ finding.rich_evidence.remediation }}</p>
+                      {% endif %}
+                      {% if finding.rich_evidence.ai_triage %}
+                        <h3>AI triage</h3>
+                        <p>{{ finding.rich_evidence.ai_triage }}</p>
+                      {% endif %}
+                      {% if finding.rich_evidence.raw_scanner_output %}
+                        <h3>Raw scanner output</h3>
+                        <div class="code">{{ finding.rich_evidence.raw_scanner_output.stdout_excerpt or finding.rich_evidence.raw_scanner_output.stderr_excerpt or "" }}</div>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {% if report.profile.includes_rich_evidence and report.tool_outputs %}
+        <section class="panel">
+          <div>
+            <h2>Raw Scanner Output</h2>
+            {% for tool in report.tool_outputs %}
+              <h3>{{ tool.tool }}</h3>
+              <p>
+                <span class="pill">Exit {{ tool.exit_code }}</span>
+                <span class="pill">{{ tool.duration_seconds }}s</span>
+              </p>
+              {% if tool.command %}<p><strong>Command:</strong> {{ tool.command|join(" ") }}</p>{% endif %}
+              {% if tool.stdout %}<div class="code">{{ tool.stdout }}</div>{% endif %}
+              {% if tool.stderr %}<div class="code">{{ tool.stderr }}</div>{% endif %}
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

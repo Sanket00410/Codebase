@@ -78,6 +78,23 @@ class ReportArtifact(BaseModel):
     kind: str
     path: str
     media_type: str
+    profile_id: str | None = None
+    label: str | None = None
+    description: str | None = None
+
+
+class ReportProfileDefinition(BaseModel):
+    id: str
+    label: str
+    description: str
+    media_type: str
+    extension: str
+    supports_rich_evidence: bool = False
+
+
+class ReportGenerationRequest(BaseModel):
+    profile_ids: list[str] = Field(default_factory=list)
+    include_plus_variants: bool = False
 
 
 class NormalizedFinding(BaseModel):
@@ -136,7 +153,9 @@ class ScanRequest(BaseModel):
     repository_path: str
     categories: list[ScanCategory] | None = None
     tools: list[str] | None = None
-    report_formats: list[str] = Field(default_factory=lambda: ["json", "sarif", "html", "md"])
+    report_profiles: list[str] | None = None
+    report_formats: list[str] = Field(default_factory=list)
+    include_plus_report_variants: bool = False
     exclude_paths: list[str] = Field(
         default_factory=lambda: [
             ".git",

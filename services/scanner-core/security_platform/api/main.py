@@ -5,8 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from security_platform.core.config import settings
-from security_platform.core.models import ScanRequest
+from security_platform.core.models import ReportGenerationRequest, ScanRequest
 from security_platform.core.orchestrator import ScanOrchestrator
+from security_platform.core.reporting import list_report_profiles
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -69,6 +70,25 @@ async def create_scan(request: ScanRequest):
 async def run_sync_scan(request: ScanRequest):
     try:
         return await orchestrator.run_scan_sync(request)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/report-profiles")
+async def get_report_profiles():
+    return list_report_profiles()
+
+
+@app.post("/reports/{scan_id}/generate")
+async def generate_report_set(scan_id: str, request: ReportGenerationRequest):
+    try:
+        return await orchestrator.generate_reports_for_scan(
+            scan_id,
+            profile_ids=request.profile_ids,
+            include_plus_variants=request.include_plus_variants,
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
     except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

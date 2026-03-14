@@ -49,4 +49,7 @@ security_platform/plugins/syft.py
 security_platform/plugins/trivy.py
 security_platform/plugins/trufflehog.py
 security_platform/resources/tool_manifests.yaml
+security_platform/templates/executive-summary.html.j2
+security_platform/templates/modern-report.html.j2
 security_platform/templates/report.html.j2
+security_platform/templates/traditional-report.html.j2

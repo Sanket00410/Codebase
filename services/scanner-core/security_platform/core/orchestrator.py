@@ -12,7 +12,7 @@ from security_platform.core.config import settings
 from security_platform.core.correlation import correlate_findings
 from security_platform.core.models import PluginDescriptor, PluginRunResult, ScanRequest, ScanResult, ScanStatus
 from security_platform.core.plugin import ScanExecutionContext
-from security_platform.core.reporting import generate_reports
+from security_platform.core.reporting import default_report_profile_ids, generate_reports, resolve_report_profile_ids
 from security_platform.core.repository import analyze_repository
 from security_platform.core.scoring import summarize_findings
 from security_platform.core.storage import ScanStore
@@ -116,7 +116,11 @@ class ScanOrchestrator:
             result.completed_tools = result.total_tools
             result.progress_percent = 100.0
             result.active_tools = []
-            result.artifacts.extend(generate_reports(result, request.report_formats))
+            requested_reports = request.report_profiles or request.report_formats or default_report_profile_ids()
+            result.artifacts.extend(
+                generate_reports(result, requested_reports, include_plus_variants=request.include_plus_report_variants)
+            )
+            result.artifacts = self._dedupe_artifacts(result.artifacts)
             self.store.upsert_scan(result)
         except Exception as error:
             result.status = ScanStatus.FAILED
@@ -163,3 +167,26 @@ class ScanOrchestrator:
 
     async def update_advisories(self) -> dict[str, int]:
         return await self.advisory_manager.update_all()
+
+    async def generate_reports_for_scan(
+        self,
+        scan_id: str,
+        profile_ids: list[str] | None = None,
+        include_plus_variants: bool = False,
+    ) -> list:
+        result = self.store.get_scan(scan_id)
+        if not result:
+            raise FileNotFoundError(f"Scan not found: {scan_id}")
+        requested_reports = resolve_report_profile_ids(profile_ids, include_plus_variants=include_plus_variants)
+        generated = generate_reports(result, requested_reports)
+        result.artifacts.extend(generated)
+        result.artifacts = self._dedupe_artifacts(result.artifacts)
+        self.store.upsert_scan(result)
+        return generated
+
+    @staticmethod
+    def _dedupe_artifacts(artifacts):
+        unique = {}
+        for artifact in artifacts:
+            unique[(artifact.kind, artifact.path)] = artifact
+        return list(unique.values())

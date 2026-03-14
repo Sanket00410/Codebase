@@ -787,6 +787,10 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.report-profile-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .plugin-card {
   padding: 0;
   overflow: hidden;
@@ -814,6 +818,11 @@ button {
   display: grid;
   gap: 10px;
   padding: 16px;
+}
+
+.report-profile-card {
+  align-content: start;
+  min-height: 170px;
 }
 
 .inspector-header {

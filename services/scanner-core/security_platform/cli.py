@@ -26,10 +26,17 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("repository_path")
     scan.add_argument("--category", action="append", choices=[item.value for item in ScanCategory])
     scan.add_argument("--tool", action="append")
-    scan.add_argument("--format", action="append", default=["json", "sarif", "html"])
+    scan.add_argument("--format", action="append", default=[])
+    scan.add_argument("--profile", action="append")
+    scan.add_argument("--plus-reports", action="store_true")
     scan.add_argument("--offline", action="store_true")
     scan.add_argument("--update-advisories", action="store_true")
     scan.add_argument("--no-git-history", action="store_true")
+
+    generate_reports = subparsers.add_parser("generate-reports", help="Generate report profiles for an existing scan")
+    generate_reports.add_argument("scan_id")
+    generate_reports.add_argument("--profile", action="append")
+    generate_reports.add_argument("--plus-reports", action="store_true")
 
     install = subparsers.add_parser("install-tool", help="Install a scanner binary")
     install.add_argument("tool_name")
@@ -45,7 +52,9 @@ async def _run_scan(args) -> int:
         repository_path=args.repository_path,
         categories=[ScanCategory(value) for value in args.category] if args.category else None,
         tools=args.tool,
+        report_profiles=args.profile,
         report_formats=args.format,
+        include_plus_report_variants=args.plus_reports,
         offline=args.offline,
         update_advisories=args.update_advisories,
         include_git_history=not args.no_git_history,
@@ -77,6 +86,18 @@ async def _list_plugins() -> int:
     plugins = await orchestrator.list_plugins()
     _configure_stdout()
     print(json.dumps([plugin.model_dump() for plugin in plugins], indent=2))
+    return 0
+
+
+async def _generate_reports(args) -> int:
+    orchestrator = ScanOrchestrator()
+    artifacts = await orchestrator.generate_reports_for_scan(
+        args.scan_id,
+        profile_ids=args.profile,
+        include_plus_variants=args.plus_reports,
+    )
+    _configure_stdout()
+    print(json.dumps([artifact.model_dump() for artifact in artifacts], indent=2))
     return 0
 
 
@@ -120,6 +141,8 @@ def main() -> None:
         return
     if args.command == "scan":
         raise SystemExit(asyncio.run(_run_scan(args)))
+    if args.command == "generate-reports":
+        raise SystemExit(asyncio.run(_generate_reports(args)))
     if args.command == "install-tool":
         raise SystemExit(asyncio.run(_install_tool(args)))
     if args.command == "update-advisories":
