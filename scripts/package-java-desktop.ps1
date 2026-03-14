@@ -15,6 +15,12 @@ $javaProject = Join-Path $root "apps\desktop-java"
 $env:JAVA_HOME = Join-Path $root ".tools\java-desktop\jdk"
 $env:Path = "$(Join-Path $env:JAVA_HOME 'bin');$env:Path"
 
+if ($Type -ne "app-image") {
+    & "$PSScriptRoot\bootstrap-wix.ps1"
+    $wixBin = Join-Path $root ".tools\wix314\bin"
+    $env:Path = "$wixBin;$env:Path"
+}
+
 $gradle = Join-Path $root ".tools\java-desktop\gradle\bin\gradle.bat"
 
 switch ($Flavor) {
