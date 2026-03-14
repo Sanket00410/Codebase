@@ -115,27 +115,27 @@ type SourceWindowResult = {
 
 const workspaceMeta: Record<WorkspaceTabId, { label: string; eyebrow: string; description: string }> = {
   dashboard: {
-    label: "Command Deck",
+    label: "Overview",
     eyebrow: "Workspace",
-    description: "Run scans, watch execution pressure, and review repository posture from a single desktop surface.",
+    description: "Launch scans, watch progress, and review the current repository state from one desktop surface.",
   },
   findings: {
-    label: "Finding Explorer",
+    label: "Findings",
     eyebrow: "Investigation",
-    description: "Filter normalized findings, pivot by severity, and inspect remediation context and evidence.",
+    description: "Filter normalized findings, pivot by severity, and inspect evidence, location, and remediation context.",
   },
   dependencies: {
-    label: "Dependency Graph",
+    label: "Dependencies",
     eyebrow: "Intelligence",
-    description: "Inspect ecosystem inventory, package surfaces, and graph-connected dependency exposure.",
+    description: "Inspect package inventory, ecosystem spread, and graph-connected dependency exposure.",
   },
   reports: {
-    label: "Report Explorer",
+    label: "Reports",
     eyebrow: "Artifacts",
     description: "Open generated reports, raw scanner payloads, and execution telemetry from the local report store.",
   },
   plugins: {
-    label: "Plugin Manager",
+    label: "Runtime & Tools",
     eyebrow: "Runtime",
     description: "Manage scanner engines, verify local binary state, and close runtime coverage gaps.",
   },
@@ -150,7 +150,7 @@ const menuLabels: Record<Exclude<MenuId, null>, string> = {
   help: "Help",
 };
 
-const workbenchLayoutStorageKey = "code-base-scanner.workbench-layout.v2";
+const workbenchLayoutStorageKey = "code-base-scanner.workbench-layout.v3";
 const minLeftDockWidth = 240;
 const maxLeftDockWidth = 520;
 const minRightDockWidth = 300;
@@ -164,9 +164,9 @@ const defaultWorkbenchLayout: WorkbenchLayoutState = {
   showTreeDock: true,
   showInspectorDock: true,
   showConsoleDock: true,
-  leftDockWidth: 300,
-  rightDockWidth: 360,
-  consoleHeight: 240,
+  leftDockWidth: 280,
+  rightDockWidth: 340,
+  consoleHeight: 200,
 };
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -2713,7 +2713,11 @@ export default function App() {
             <span className="brand-badge">CB</span>
             <div>
               <div className="brand-title">Code Base Scanner</div>
-              <div className="brand-subtitle">Local-first security workbench</div>
+              <div className="brand-subtitle">
+                {repositoryPath || scan?.repository_path
+                  ? `${selectedRepositoryName} · ${scan ? `${scan.summary.total_findings} findings` : "ready to scan"}`
+                  : "Desktop investigator workbench"}
+              </div>
             </div>
           </div>
           <nav className="menu-strip">
@@ -2765,7 +2769,7 @@ export default function App() {
             disabled={commandRegistry["open-repository"].disabled}
             onClick={() => dispatchCommand("open-repository")}
           >
-            Open Repo
+            Open Repository
           </button>
           <button
             className="button secondary button-inline"
@@ -2779,10 +2783,10 @@ export default function App() {
             disabled={commandRegistry["sync-advisories"].disabled}
             onClick={() => dispatchCommand("sync-advisories")}
           >
-            Update Feeds
+            Sync Advisories
           </button>
           <button className="button ghost button-inline" onClick={() => dispatchCommand("open-command-palette")}>
-            Commands
+            Command Palette
           </button>
         </div>
         <div className="toolbar-group">
@@ -2796,7 +2800,7 @@ export default function App() {
             Console
           </button>
           <button className={`toolbar-toggle ${inspectorMode === "runtime" ? "active" : ""}`} onClick={() => dispatchCommand("toggle-inspector-mode")}>
-            {inspectorMode === "runtime" ? "Runtime Inspector" : "Context Inspector"}
+            {inspectorMode === "runtime" ? "Mode: Runtime" : "Mode: Context"}
           </button>
         </div>
       </section>
@@ -2814,23 +2818,23 @@ export default function App() {
               <div className="tree-group">
                 <button className={`tree-node ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => setActiveTab("dashboard")}>
                   <span>Overview</span>
-                  <strong>Command Deck</strong>
+                  <strong>Overview</strong>
                 </button>
                 <button className={`tree-node ${activeTab === "findings" ? "active" : ""}`} onClick={() => setActiveTab("findings")}>
                   <span>Investigation</span>
-                  <strong>Finding Explorer</strong>
+                  <strong>Findings</strong>
                 </button>
                 <button className={`tree-node ${activeTab === "dependencies" ? "active" : ""}`} onClick={() => setActiveTab("dependencies")}>
                   <span>Intelligence</span>
-                  <strong>Dependency Graph</strong>
+                  <strong>Dependencies</strong>
                 </button>
                 <button className={`tree-node ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}>
                   <span>Artifacts</span>
-                  <strong>Report Explorer</strong>
+                  <strong>Reports</strong>
                 </button>
                 <button className={`tree-node ${activeTab === "plugins" ? "active" : ""}`} onClick={() => setActiveTab("plugins")}>
                   <span>Runtime</span>
-                  <strong>Plugin Manager</strong>
+                  <strong>Runtime &amp; Tools</strong>
                 </button>
               </div>
             </section>
@@ -2960,7 +2964,7 @@ export default function App() {
             <div className="inspector-header">
               <div>
                 <span className="eyebrow">Inspector</span>
-                <h3>{inspectorMode === "context" ? "Selection detail" : "Runtime detail"}</h3>
+                <h3>{inspectorMode === "context" ? "Details" : "Runtime"}</h3>
               </div>
               <div className="pill-row">
                 {inspectorModes.map((mode) => (

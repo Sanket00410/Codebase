@@ -57,8 +57,8 @@ button {
   height: 100vh;
   display: grid;
   grid-template-rows: auto auto 1fr auto auto;
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 10px;
   overflow: hidden;
 }
 
@@ -88,7 +88,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   position: relative;
 }
 
@@ -130,12 +130,12 @@ button {
 .toolbar-actions,
 .toggle-row,
 .console-controls {
-  gap: 10px;
+  gap: 8px;
 }
 
 .menu-bar-left {
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .menu-bar-right {
@@ -147,9 +147,10 @@ button {
 .brand-mark {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  margin-right: 10px;
+  margin-right: 0;
+  min-width: 0;
 }
 
 .brand-badge {
@@ -165,18 +166,19 @@ button {
 }
 
 .brand-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .brand-subtitle {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .menu-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: none;
 }
 
 .menu-host {
@@ -246,7 +248,7 @@ button {
 .toolbar {
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   flex-wrap: wrap;
 }
 
@@ -289,7 +291,7 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -311,11 +313,12 @@ button {
 }
 
 .dock {
-  padding: 14px;
+  padding: 12px;
   display: grid;
   align-content: start;
-  gap: 14px;
-  overflow: auto;
+  gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .dock-section,
@@ -328,22 +331,22 @@ button {
 .workspace-panel {
   display: grid;
   grid-template-rows: auto auto 1fr;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   overflow: hidden;
 }
 
 .workspace-header {
   justify-content: space-between;
   align-items: flex-start;
-  gap: 14px;
-  padding: 10px 6px 4px;
+  gap: 12px;
+  padding: 4px 2px 2px;
 }
 
 .workspace-header h1 {
   margin: 4px 0 6px;
-  font-size: clamp(28px, 3vw, 40px);
-  line-height: 1;
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.05;
 }
 
 .workspace-header p {
@@ -351,22 +354,23 @@ button {
   color: var(--muted);
   max-width: 58rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .workspace-header-metrics {
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .header-metric {
-  min-width: 110px;
-  padding: 12px 14px;
+  min-width: 96px;
+  padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--panel-2);
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .header-metric span,
@@ -381,21 +385,22 @@ button {
 }
 
 .header-metric strong {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .tab-strip {
-  display: flex;
-  gap: 10px;
-  overflow: auto;
-  padding-bottom: 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  overflow: visible;
+  padding-bottom: 2px;
 }
 
 .tab-button {
-  min-width: 152px;
+  min-width: 0;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--panel-3);
@@ -427,11 +432,16 @@ button {
 
 .workspace-scroll {
   height: 100%;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: grid;
   align-content: start;
   gap: 14px;
   padding-right: 4px;
+}
+
+.workspace-scroll > * {
+  min-width: 0;
 }
 
 .panel {
@@ -475,6 +485,7 @@ button {
   padding: 12px 14px;
   color: var(--muted);
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .path-banner.small {
@@ -483,7 +494,7 @@ button {
 
 .button {
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   cursor: pointer;
 }
 
@@ -567,11 +578,11 @@ button {
 }
 
 .metric-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .stage-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
 .summary-grid,
@@ -584,7 +595,7 @@ button {
 }
 
 .dual-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .metric-card,
@@ -596,7 +607,7 @@ button {
 }
 
 .metric-card strong {
-  font-size: 34px;
+  font-size: 30px;
   line-height: 1;
 }
 
@@ -616,6 +627,7 @@ button {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .compact-list,
@@ -718,7 +730,7 @@ button {
 
 .finding-table-head {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1.8fr) 120px 180px 110px;
+  grid-template-columns: 100px minmax(0, 1.8fr) 100px 150px 90px;
   gap: 10px;
   padding: 0 14px 8px;
   color: var(--muted);
@@ -735,7 +747,7 @@ button {
 
 .finding-table-row {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1.8fr) 120px 180px 110px;
+  grid-template-columns: 100px minmax(0, 1.8fr) 100px 150px 90px;
   align-items: start;
 }
 
@@ -783,7 +795,8 @@ button {
 }
 
 .inspector-body {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
 }
 
@@ -824,7 +837,7 @@ button {
 .console-dock {
   display: grid;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   height: 100%;
   min-height: 0;
 }
@@ -834,7 +847,8 @@ button {
   max-height: none;
   min-height: 0;
   height: 100%;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .console-entry {
@@ -913,10 +927,10 @@ button {
 .status-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  padding: 12px 16px;
+  gap: 12px;
+  padding: 10px 14px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .empty-inline {
