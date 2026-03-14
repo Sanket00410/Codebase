@@ -1,6 +1,8 @@
 param(
     [ValidateSet("swing", "javafx", "both")]
-    [string]$Flavor = "both"
+    [string]$Flavor = "both",
+    [ValidateSet("app-image", "exe", "msi")]
+    [string]$Type = "app-image"
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,10 +18,34 @@ $env:Path = "$(Join-Path $env:JAVA_HOME 'bin');$env:Path"
 $gradle = Join-Path $root ".tools\java-desktop\gradle\bin\gradle.bat"
 
 switch ($Flavor) {
-    "swing" { & $gradle -p $javaProject packageSwingAppImage }
-    "javafx" { & $gradle -p $javaProject packageJavaFxAppImage }
+    "swing" {
+        switch ($Type) {
+            "app-image" { & $gradle -p $javaProject packageSwingAppImage }
+            "exe" { & $gradle -p $javaProject packageSwingExe }
+            "msi" { & $gradle -p $javaProject packageSwingMsi }
+        }
+    }
+    "javafx" {
+        switch ($Type) {
+            "app-image" { & $gradle -p $javaProject packageJavaFxAppImage }
+            "exe" { & $gradle -p $javaProject packageJavaFxExe }
+            "msi" { & $gradle -p $javaProject packageJavaFxMsi }
+        }
+    }
     "both" {
-        & $gradle -p $javaProject packageSwingAppImage
-        & $gradle -p $javaProject packageJavaFxAppImage
+        switch ($Type) {
+            "app-image" {
+                & $gradle -p $javaProject packageSwingAppImage
+                & $gradle -p $javaProject packageJavaFxAppImage
+            }
+            "exe" {
+                & $gradle -p $javaProject packageSwingExe
+                & $gradle -p $javaProject packageJavaFxExe
+            }
+            "msi" {
+                & $gradle -p $javaProject packageSwingMsi
+                & $gradle -p $javaProject packageJavaFxMsi
+            }
+        }
     }
 }

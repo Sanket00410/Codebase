@@ -32,8 +32,12 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
@@ -62,6 +66,11 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private Label statusLabel;
     private Label artifactsLabel;
     private Label missingToolsLabel;
+    private Label repositoryStatusLabel;
+    private Label backendStateStatusLabel;
+    private Label activeScanStatusLabel;
+    private Label statusFindingsValueLabel;
+    private Label reportsFolderStatusLabel;
     private TreeView<String> navigationTree;
     private TabPane workspaceTabs;
     private TextArea overviewArea;
@@ -78,6 +87,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private ListView<ApiModels.PluginDescriptor> pluginsList;
     private TextField findingFilterField;
     private TextField pluginFilterField;
+    private Label reportFolderLabel;
+    private Label latestArtifactLabel;
     private VBox reportProfilesBox;
     private CheckBox includePlusVariantsCheck;
 
@@ -144,6 +155,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private MenuBar buildMenuBar() {
         Menu file = new Menu("File");
         MenuItem openRepo = new MenuItem("Open Repository...");
+        openRepo.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
         openRepo.setOnAction(event -> chooseRepository());
         MenuItem exit = new MenuItem("Exit");
         exit.setOnAction(event -> stage.close());
@@ -151,8 +163,10 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
         Menu scan = new Menu("Scan");
         MenuItem start = new MenuItem("Start Scan");
+        start.setAccelerator(new KeyCodeCombination(KeyCode.ENTER, KeyCombination.SHORTCUT_DOWN));
         start.setOnAction(event -> startScan());
         MenuItem refresh = new MenuItem("Refresh");
+        refresh.setAccelerator(new KeyCodeCombination(KeyCode.R, KeyCombination.SHORTCUT_DOWN));
         refresh.setOnAction(event -> refreshSnapshot());
         MenuItem sync = new MenuItem("Sync Advisories");
         sync.setOnAction(event -> syncAdvisories());
@@ -160,6 +174,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
         Menu reports = new Menu("Reports");
         MenuItem generate = new MenuItem("Generate Report Set");
+        generate.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.SHORTCUT_DOWN));
         generate.setOnAction(event -> generateReports());
         MenuItem openSelected = new MenuItem("Open Selected Artifact");
         openSelected.setOnAction(event -> openSelectedArtifact());
@@ -261,14 +276,17 @@ public final class JavaFxWorkbenchLauncher extends Application {
             if (newValue == null || snapshot == null) {
                 return;
             }
-            snapshot = snapshot.withActiveScan(newValue);
-            applySnapshot(snapshot);
-            appendConsole("Timeline loaded scan " + newValue.scanId());
+            loadHistoricalScan(newValue, "Timeline");
         });
+
+        Button loadLatestButton = actionButton("Load Latest", this::loadLatestScan);
+        HBox timelineActions = new HBox(8, loadLatestButton);
+        VBox timelinePane = new VBox(8, timelineActions, timelineList);
+        VBox.setVgrow(timelineList, Priority.ALWAYS);
 
         bottomDockTabs = new TabPane(
                 nonClosableTab("Events", consoleArea),
-                nonClosableTab("Timeline", timelineList)
+                nonClosableTab("Timeline", timelinePane)
         );
         VBox consoleBox = new VBox(8, labeledSection("Bottom Dock"), bottomDockTabs);
         consoleBox.setPadding(new Insets(12));
@@ -298,9 +316,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
             if (newValue == null || snapshot == null) {
                 return;
             }
-            snapshot = snapshot.withActiveScan(newValue);
-            applySnapshot(snapshot);
-            appendConsole("Loaded historical scan " + newValue.scanId());
+            loadHistoricalScan(newValue, "Recent scans");
         });
 
         scoreLabel = metricLabel("Score: --");
@@ -394,7 +410,12 @@ public final class JavaFxWorkbenchLauncher extends Application {
         Button generateButton = actionButton("Generate Reports", this::generateReports);
         Button openButton = actionButton("Open Selected", this::openSelectedArtifact);
         Button openFolderButton = actionButton("Open Report Folder", this::openActiveReportFolder);
-        HBox actions = new HBox(8, generateButton, openButton, openFolderButton);
+        Button openLatestButton = actionButton("Open Latest Report", this::openLatestArtifact);
+        HBox actions = new HBox(8, generateButton, openButton, openFolderButton, openLatestButton);
+        reportFolderLabel = new Label("Report folder: unavailable");
+        reportFolderLabel.getStyleClass().add("status-line");
+        latestArtifactLabel = new Label("Latest artifact: none");
+        latestArtifactLabel.getStyleClass().add("status-line");
         ScrollPane profilesScroll = new ScrollPane(reportProfilesBox);
         profilesScroll.setFitToWidth(true);
         profilesScroll.setPrefViewportHeight(220);
@@ -412,7 +433,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         split.getItems().setAll(leftColumn, reportPreviewArea);
         split.setDividerPositions(0.36);
 
-        VBox content = new VBox(12, actions, split);
+        VBox content = new VBox(12, actions, reportFolderLabel, latestArtifactLabel, split);
         content.setPadding(new Insets(12));
         VBox.setVgrow(split, Priority.ALWAYS);
         return nonClosableTab("Reports", content);
@@ -448,10 +469,21 @@ public final class JavaFxWorkbenchLauncher extends Application {
         HBox bar = new HBox(16);
         bar.getStyleClass().add("status-bar");
         bar.setPadding(new Insets(8, 12, 10, 12));
+        repositoryStatusLabel = new Label("Repository: " + selectedRepository);
+        backendStateStatusLabel = new Label("Backend: starting");
+        activeScanStatusLabel = new Label("Active scan: none");
+        statusFindingsValueLabel = new Label("Findings: --");
+        reportsFolderStatusLabel = new Label("Reports: unavailable");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
         bar.getChildren().addAll(
                 new Label("Java rewrite path: Swing + JavaFX"),
-                new Label("Backend: 127.0.0.1:8686"),
-                new Label("Repo root: " + repositoryRoot)
+                spacer,
+                backendStateStatusLabel,
+                repositoryStatusLabel,
+                activeScanStatusLabel,
+                statusFindingsValueLabel,
+                reportsFolderStatusLabel
         );
         return bar;
     }
@@ -611,6 +643,18 @@ public final class JavaFxWorkbenchLauncher extends Application {
         }
     }
 
+    private void openLatestArtifact() {
+        if (currentArtifacts.isEmpty()) {
+            showError("Open Latest Report", new IllegalStateException("No generated artifacts are available yet."));
+            return;
+        }
+        try {
+            Desktop.getDesktop().open(Path.of(currentArtifacts.get(0).path()).toFile());
+        } catch (Exception error) {
+            showError("Open Latest Report", error);
+        }
+    }
+
     private void openActiveReportFolder() {
         if (snapshot == null || snapshot.activeScan() == null || snapshot.activeScan().safeArtifacts().isEmpty()) {
             showError("Open Report Folder", new IllegalStateException("No active scan artifacts are available yet."));
@@ -624,9 +668,29 @@ public final class JavaFxWorkbenchLauncher extends Application {
         }
     }
 
+    private void loadLatestScan() {
+        if (snapshot == null || snapshot.recentScans().isEmpty()) {
+            showError("Load Latest Scan", new IllegalStateException("No persisted scans are available yet."));
+            return;
+        }
+        loadHistoricalScan(snapshot.recentScans().get(0), "Timeline");
+    }
+
+    private void loadHistoricalScan(ApiModels.ScanResult scanResult, String origin) {
+        snapshot = snapshot.withActiveScan(scanResult);
+        applySnapshot(snapshot);
+        appendConsole(origin + " loaded scan " + scanResult.scanId());
+    }
+
     private void applySnapshot(DesktopApplicationService.DesktopSnapshot latest) {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
         repositoryLabel.setText("Repository: " + latest.selectedRepository());
+        if (repositoryStatusLabel != null) {
+            repositoryStatusLabel.setText("Repository: " + latest.selectedRepository());
+        }
+        if (backendStateStatusLabel != null) {
+            backendStateStatusLabel.setText(latest.backendReady() ? "Backend: ready" : "Backend: unavailable");
+        }
         overviewArea.setText(WorkbenchText.formatRepositorySummary(latest.selectedRepository(), latest.activeScan())
                 + System.lineSeparator() + System.lineSeparator()
                 + WorkbenchText.formatScanOverview(latest.activeScan()));
@@ -652,6 +716,12 @@ public final class JavaFxWorkbenchLauncher extends Application {
             artifactsLabel.setText("Artifacts: " + currentArtifacts.size());
             missingToolsLabel.setText("Missing tools: " + (int) currentPlugins.stream().filter(plugin -> !plugin.available()).count());
             inspectorArea.setText(WorkbenchText.formatScanOverview(activeScan));
+            if (activeScanStatusLabel != null) {
+                activeScanStatusLabel.setText("Active scan: " + activeScan.scanId());
+            }
+            if (statusFindingsValueLabel != null) {
+                statusFindingsValueLabel.setText("Findings: " + activeScan.summary().totalFindings());
+            }
         } else {
             scoreLabel.setText("Score: --");
             findingsLabel.setText("Findings: --");
@@ -659,6 +729,36 @@ public final class JavaFxWorkbenchLauncher extends Application {
             statusLabel.setText("Status: idle");
             artifactsLabel.setText("Artifacts: --");
             missingToolsLabel.setText("Missing tools: --");
+            if (activeScanStatusLabel != null) {
+                activeScanStatusLabel.setText("Active scan: none");
+            }
+            if (statusFindingsValueLabel != null) {
+                statusFindingsValueLabel.setText("Findings: --");
+            }
+        }
+
+        if (!currentArtifacts.isEmpty()) {
+            Path reportFolder = Path.of(currentArtifacts.get(0).path()).getParent();
+            String latestArtifactName = Path.of(currentArtifacts.get(0).path()).getFileName().toString();
+            if (reportFolderLabel != null) {
+                reportFolderLabel.setText("Report folder: " + reportFolder);
+            }
+            if (latestArtifactLabel != null) {
+                latestArtifactLabel.setText("Latest artifact: " + latestArtifactName);
+            }
+            if (reportsFolderStatusLabel != null) {
+                reportsFolderStatusLabel.setText("Reports: " + reportFolder);
+            }
+        } else {
+            if (reportFolderLabel != null) {
+                reportFolderLabel.setText("Report folder: unavailable");
+            }
+            if (latestArtifactLabel != null) {
+                latestArtifactLabel.setText("Latest artifact: none");
+            }
+            if (reportsFolderStatusLabel != null) {
+                reportsFolderStatusLabel.setText("Reports: unavailable");
+            }
         }
 
         if (!currentFindings.isEmpty()) {

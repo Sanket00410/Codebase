@@ -51,3 +51,10 @@ Create Windows app-image packaging for the rewrite path:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\package-java-desktop.ps1 -Flavor both
 ```
+
+Create Windows installer packaging when WiX Toolset is installed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-java-desktop.ps1 -Flavor javafx -Type exe
+powershell -ExecutionPolicy Bypass -File scripts\package-java-desktop.ps1 -Flavor javafx -Type msi
+```

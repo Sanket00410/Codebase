@@ -1,4 +1,5 @@
 import org.gradle.internal.os.OperatingSystem
+import java.io.ByteArrayOutputStream
 
 plugins {
     application
@@ -94,6 +95,7 @@ tasks.register<Exec>("packageSwingAppImage") {
         val jpackageExecutable = file("$javaHome/bin/$jpackageName")
         val outputDir = packageRootDir.get().dir("swing").asFile
         outputDir.mkdirs()
+        outputDir.resolve("CodeBaseScannerSwing").deleteRecursively()
         commandLine(
             jpackageExecutable.absolutePath,
             "--type", "app-image",
@@ -117,6 +119,7 @@ tasks.register<Exec>("packageJavaFxAppImage") {
         val jpackageExecutable = file("$javaHome/bin/$jpackageName")
         val outputDir = packageRootDir.get().dir("javafx").asFile
         outputDir.mkdirs()
+        outputDir.resolve("CodeBaseScannerJavaFx").deleteRecursively()
         commandLine(
             jpackageExecutable.absolutePath,
             "--type", "app-image",
@@ -133,3 +136,106 @@ tasks.register<Exec>("packageJavaFxAppImage") {
         )
     }
 }
+
+fun wixAvailable(): Boolean {
+    if (!currentOs.isWindows) {
+        return false
+    }
+    val candidates = listOf("wix", "candle.exe", "light.exe")
+    return candidates.any { candidate ->
+        try {
+            val output = ByteArrayOutputStream()
+            exec {
+                isIgnoreExitValue = true
+                commandLine("cmd", "/c", "where", candidate)
+                standardOutput = output
+                errorOutput = output
+            }.exitValue == 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+}
+
+fun configureWindowsInstallerTask(
+    taskName: String,
+    taskDescription: String,
+    packageType: String,
+    appName: String,
+    mainClassName: String,
+    includeJavaFxModules: Boolean
+) = tasks.register<Exec>(taskName) {
+    group = "distribution"
+    description = taskDescription
+    dependsOn("installDist")
+    doFirst {
+        if (!currentOs.isWindows) {
+            throw GradleException("Windows installer packaging is only supported on Windows builders.")
+        }
+        if (!wixAvailable()) {
+            throw GradleException("WiX Toolset was not found on PATH. Install WiX to build Windows exe/msi installers.")
+        }
+        val javaHome = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
+        val jpackageExecutable = file("$javaHome/bin/jpackage.exe")
+        val outputDir = packageRootDir.get().dir("${appName.lowercase()}-$packageType").asFile
+        outputDir.mkdirs()
+        outputDir.resolve(appName).deleteRecursively()
+        val command = mutableListOf(
+            jpackageExecutable.absolutePath,
+            "--type", packageType,
+            "--dest", outputDir.absolutePath,
+            "--name", appName,
+            "--input", installLibDir.get().asFile.absolutePath,
+            "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
+            "--main-class", mainClassName,
+            "--java-options", "-Dfile.encoding=UTF-8"
+        )
+        if (includeJavaFxModules) {
+            command.addAll(
+                listOf(
+                    "--java-options", "--module-path",
+                    "--java-options", "\$APPDIR\\lib",
+                    "--java-options", "--add-modules",
+                    "--java-options", "javafx.controls,javafx.graphics,javafx.base"
+                )
+            )
+        }
+        commandLine(command)
+    }
+}
+
+configureWindowsInstallerTask(
+    taskName = "packageSwingExe",
+    taskDescription = "Package the Swing rewrite path as a Windows exe installer.",
+    packageType = "exe",
+    appName = "CodeBaseScannerSwing",
+    mainClassName = "com.darkworld.codebasescanner.desktopjava.swing.SwingWorkbenchLauncher",
+    includeJavaFxModules = false
+)
+
+configureWindowsInstallerTask(
+    taskName = "packageSwingMsi",
+    taskDescription = "Package the Swing rewrite path as a Windows msi installer.",
+    packageType = "msi",
+    appName = "CodeBaseScannerSwing",
+    mainClassName = "com.darkworld.codebasescanner.desktopjava.swing.SwingWorkbenchLauncher",
+    includeJavaFxModules = false
+)
+
+configureWindowsInstallerTask(
+    taskName = "packageJavaFxExe",
+    taskDescription = "Package the JavaFX rewrite path as a Windows exe installer.",
+    packageType = "exe",
+    appName = "CodeBaseScannerJavaFx",
+    mainClassName = "com.darkworld.codebasescanner.desktopjava.javafx.JavaFxWorkbenchLauncher",
+    includeJavaFxModules = true
+)
+
+configureWindowsInstallerTask(
+    taskName = "packageJavaFxMsi",
+    taskDescription = "Package the JavaFX rewrite path as a Windows msi installer.",
+    packageType = "msi",
+    appName = "CodeBaseScannerJavaFx",
+    mainClassName = "com.darkworld.codebasescanner.desktopjava.javafx.JavaFxWorkbenchLauncher",
+    includeJavaFxModules = true
+)
