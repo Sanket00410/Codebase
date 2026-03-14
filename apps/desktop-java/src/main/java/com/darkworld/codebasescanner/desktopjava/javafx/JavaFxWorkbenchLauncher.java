@@ -36,6 +36,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
@@ -193,10 +194,13 @@ public final class JavaFxWorkbenchLauncher extends Application {
         box.getStyleClass().add("header-bar");
         box.setPadding(new Insets(14, 16, 10, 16));
         VBox titleBox = new VBox(4);
+        titleBox.getStyleClass().add("title-box");
         Label title = new Label("Code Base Scanner");
         title.getStyleClass().add("header-title");
         repositoryLabel = new Label("Repository: " + selectedRepository);
+        repositoryLabel.getStyleClass().add("header-subtitle");
         backendStatusLabel = new Label("Backend starting...");
+        backendStatusLabel.getStyleClass().addAll("status-pill", "status-pill-pending");
         titleBox.getChildren().addAll(title, repositoryLabel);
         HBox.setHgrow(titleBox, Priority.ALWAYS);
         box.getChildren().addAll(titleBox, backendStatusLabel);
@@ -205,18 +209,25 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private ToolBar buildToolBar() {
         ToolBar toolBar = new ToolBar();
+        toolBar.getStyleClass().add("workbench-toolbar");
+        Button startButton = primaryActionButton("Start Scan", this::startScan);
+        Button openRepositoryButton = actionButton("Open Repository", this::chooseRepository);
+        Button refreshButton = actionButton("Refresh", this::refreshSnapshot);
+        Button generateReportsButton = primaryActionButton("Generate Reports", this::generateReports);
+        Button syncFeedsButton = actionButton("Sync Advisories", this::syncAdvisories);
         toolBar.getItems().addAll(
-                actionButton("Start Scan", this::startScan),
-                actionButton("Open Repository", this::chooseRepository),
-                actionButton("Refresh", this::refreshSnapshot),
-                actionButton("Generate Reports", this::generateReports),
-                actionButton("Sync Advisories", this::syncAdvisories)
+                startButton,
+                openRepositoryButton,
+                refreshButton,
+                generateReportsButton,
+                syncFeedsButton
         );
         return toolBar;
     }
 
     private SplitPane buildWorkspace() {
         navigationTree = new TreeView<>(buildNavigationTree());
+        navigationTree.getStyleClass().add("navigation-tree");
         navigationTree.setShowRoot(false);
         navigationTree.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
             if (newValue == null) {
@@ -240,8 +251,10 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 buildReportsTab(),
                 buildRuntimeTab()
         );
+        workspaceTabs.getStyleClass().add("workspace-tabs");
 
         TabPane inspectorTabs = new TabPane();
+        inspectorTabs.getStyleClass().add("inspector-tabs");
         inspectorArea = readOnlyArea();
         sourceArea = readOnlyArea();
         inspectorTabs.getTabs().addAll(
@@ -250,11 +263,13 @@ public final class JavaFxWorkbenchLauncher extends Application {
         );
 
         SplitPane centerSplit = new SplitPane(workspaceTabs, inspectorTabs);
+        centerSplit.getStyleClass().add("center-split");
         centerSplit.setDividerPositions(0.74);
 
         consoleArea = readOnlyArea();
         consoleArea.setPrefRowCount(8);
         timelineList = new ListView<>();
+        timelineList.getStyleClass().add("timeline-list");
         timelineList.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(ApiModels.ScanResult item, boolean empty) {
@@ -282,6 +297,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         Button loadLatestButton = actionButton("Load Latest", this::loadLatestScan);
         HBox timelineActions = new HBox(8, loadLatestButton);
         VBox timelinePane = new VBox(8, timelineActions, timelineList);
+        timelinePane.getStyleClass().add("timeline-pane");
         VBox.setVgrow(timelineList, Priority.ALWAYS);
 
         bottomDockTabs = new TabPane(
@@ -294,9 +310,11 @@ public final class JavaFxWorkbenchLauncher extends Application {
         VBox.setVgrow(bottomDockTabs, Priority.ALWAYS);
 
         SplitPane contentSplit = new SplitPane(new VBox(navigationTree), centerSplit);
+        contentSplit.getStyleClass().add("content-split");
         contentSplit.setDividerPositions(0.16);
 
         SplitPane vertical = new SplitPane(contentSplit, consoleBox);
+        vertical.getStyleClass().add("vertical-split");
         vertical.setOrientation(Orientation.VERTICAL);
         vertical.setDividerPositions(0.76);
         return vertical;
@@ -325,9 +343,11 @@ public final class JavaFxWorkbenchLauncher extends Application {
         statusLabel = metricLabel("Status: idle");
         artifactsLabel = metricLabel("Artifacts: --");
         missingToolsLabel = metricLabel("Missing tools: --");
-        HBox metrics = new HBox(12, scoreLabel, findingsLabel, toolsLabel, statusLabel, artifactsLabel, missingToolsLabel);
+        FlowPane metrics = new FlowPane(12, 12, scoreLabel, findingsLabel, toolsLabel, statusLabel, artifactsLabel, missingToolsLabel);
+        metrics.getStyleClass().add("metrics-flow");
 
         VBox content = new VBox(12, metrics, labeledSection("Repository Summary"), overviewArea, labeledSection("Recent Scans"), scansList);
+        content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(overviewArea, Priority.ALWAYS);
         VBox.setVgrow(scansList, Priority.ALWAYS);
@@ -354,6 +374,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
             sourceArea.setText(LocalFilePreviewer.sourcePreview(selectedRepository, newValue));
         });
         VBox content = new VBox(12, labeledSection("Findings"), findingFilterField, findingsList);
+        content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(findingsList, Priority.ALWAYS);
         return nonClosableTab("Findings", content);
@@ -381,6 +402,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         });
 
         VBox content = new VBox(12, labeledSection("Dependencies"), dependenciesList);
+        content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(dependenciesList, Priority.ALWAYS);
         return nonClosableTab("Dependencies", content);
@@ -407,11 +429,12 @@ public final class JavaFxWorkbenchLauncher extends Application {
         reportProfilesBox = new VBox(8);
         includePlusVariantsCheck = new CheckBox("Include plus variants with evidence");
         includePlusVariantsCheck.setSelected(true);
-        Button generateButton = actionButton("Generate Reports", this::generateReports);
+        Button generateButton = primaryActionButton("Generate Reports", this::generateReports);
         Button openButton = actionButton("Open Selected", this::openSelectedArtifact);
         Button openFolderButton = actionButton("Open Report Folder", this::openActiveReportFolder);
         Button openLatestButton = actionButton("Open Latest Report", this::openLatestArtifact);
-        HBox actions = new HBox(8, generateButton, openButton, openFolderButton, openLatestButton);
+        FlowPane actions = new FlowPane(8, 8, generateButton, openButton, openFolderButton, openLatestButton);
+        actions.getStyleClass().add("actions-flow");
         reportFolderLabel = new Label("Report folder: unavailable");
         reportFolderLabel.getStyleClass().add("status-line");
         latestArtifactLabel = new Label("Latest artifact: none");
@@ -430,10 +453,12 @@ public final class JavaFxWorkbenchLauncher extends Application {
         VBox.setVgrow(artifactsList, Priority.ALWAYS);
         VBox.setVgrow(profilesScroll, Priority.ALWAYS);
         SplitPane split = new SplitPane(artifactsList, reportPreviewArea);
+        split.getStyleClass().add("report-split");
         split.getItems().setAll(leftColumn, reportPreviewArea);
         split.setDividerPositions(0.36);
 
         VBox content = new VBox(12, actions, reportFolderLabel, latestArtifactLabel, split);
+        content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(split, Priority.ALWAYS);
         return nonClosableTab("Reports", content);
@@ -458,8 +483,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
             inspectorArea.setText(WorkbenchText.formatPluginDetails(newValue));
             sourceArea.setText("Tool runtimes do not have source previews.");
         });
-        Button installButton = actionButton("Install Selected", this::installSelectedPlugin);
+        Button installButton = primaryActionButton("Install Selected", this::installSelectedPlugin);
         VBox content = new VBox(12, installButton, pluginFilterField, pluginsList);
+        content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(pluginsList, Priority.ALWAYS);
         return nonClosableTab("Runtime", content);
@@ -684,6 +710,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private void applySnapshot(DesktopApplicationService.DesktopSnapshot latest) {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
+        backendStatusLabel.getStyleClass().removeAll("status-pill-live", "status-pill-pending");
+        backendStatusLabel.getStyleClass().add(latest.backendReady() ? "status-pill-live" : "status-pill-pending");
         repositoryLabel.setText("Repository: " + latest.selectedRepository());
         if (repositoryStatusLabel != null) {
             repositoryStatusLabel.setText("Repository: " + latest.selectedRepository());
@@ -902,12 +930,20 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private Button actionButton(String label, Runnable action) {
         Button button = new Button(label);
+        button.getStyleClass().add("workbench-button");
         button.setOnAction(event -> action.run());
+        return button;
+    }
+
+    private Button primaryActionButton(String label, Runnable action) {
+        Button button = actionButton(label, action);
+        button.getStyleClass().add("primary-action");
         return button;
     }
 
     private TextArea readOnlyArea() {
         TextArea area = new TextArea();
+        area.getStyleClass().add("viewer-area");
         area.setEditable(false);
         area.setWrapText(true);
         return area;
