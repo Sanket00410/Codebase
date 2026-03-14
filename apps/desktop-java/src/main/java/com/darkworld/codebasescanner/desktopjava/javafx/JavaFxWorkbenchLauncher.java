@@ -13,7 +13,10 @@ import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -66,7 +69,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private TextArea sourceArea;
     private TextArea reportPreviewArea;
     private TextArea consoleArea;
+    private TabPane bottomDockTabs;
     private ListView<ApiModels.ScanResult> scansList;
+    private ListView<ApiModels.ScanResult> timelineList;
     private ListView<ApiModels.Finding> findingsList;
     private ListView<ApiModels.DependencyNode> dependenciesList;
     private ListView<ApiModels.Artifact> artifactsList;
@@ -234,9 +239,41 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
         consoleArea = readOnlyArea();
         consoleArea.setPrefRowCount(8);
-        VBox consoleBox = new VBox(8, labeledSection("Event Console"), consoleArea);
+        timelineList = new ListView<>();
+        timelineList.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(ApiModels.ScanResult item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                String score = item.summary() != null && item.summary().score() != null
+                        ? String.format("%.2f", item.summary().score())
+                        : "--";
+                String findings = item.summary() != null && item.summary().totalFindings() != null
+                        ? item.summary().totalFindings().toString()
+                        : "0";
+                setText(item.startedAt() + " | " + item.status() + " | score " + score + " | findings " + findings);
+            }
+        });
+        timelineList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
+            if (newValue == null || snapshot == null) {
+                return;
+            }
+            snapshot = snapshot.withActiveScan(newValue);
+            applySnapshot(snapshot);
+            appendConsole("Timeline loaded scan " + newValue.scanId());
+        });
+
+        bottomDockTabs = new TabPane(
+                nonClosableTab("Events", consoleArea),
+                nonClosableTab("Timeline", timelineList)
+        );
+        VBox consoleBox = new VBox(8, labeledSection("Bottom Dock"), bottomDockTabs);
         consoleBox.setPadding(new Insets(12));
         consoleBox.getStyleClass().add("console-box");
+        VBox.setVgrow(bottomDockTabs, Priority.ALWAYS);
 
         SplitPane contentSplit = new SplitPane(new VBox(navigationTree), centerSplit);
         contentSplit.setDividerPositions(0.16);
@@ -461,19 +498,76 @@ public final class JavaFxWorkbenchLauncher extends Application {
             showError("Generate Reports", new IllegalStateException("No active scan is loaded yet."));
             return;
         }
-        List<String> profiles = selectedReportProfileIds();
-        if (profiles.isEmpty()) {
-            showError("Generate Reports", new IllegalStateException("Select at least one report profile."));
+        ReportGenerationSelection selection = showReportGenerationDialog();
+        if (selection == null) {
             return;
         }
         runBackground(
                 "Generating report set",
-                () -> service.generateReports(snapshot.activeScan().scanId(), profiles, includePlusVariantsCheck.isSelected()),
+                () -> service.generateReports(snapshot.activeScan().scanId(), selection.profileIds(), selection.includePlusVariants()),
                 artifacts -> {
             appendConsole("Generated " + artifacts.size() + " report artifacts for scan " + snapshot.activeScan().scanId());
             refreshSnapshot();
             workspaceTabs.getSelectionModel().select(3);
+            bottomDockTabs.getSelectionModel().select(0);
         });
+    }
+
+    private ReportGenerationSelection showReportGenerationDialog() {
+        Dialog<ReportGenerationSelection> dialog = new Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle("Generate Reports");
+        dialog.setHeaderText("Choose report profiles and evidence depth for the active scan.");
+
+        ButtonType generateType = new ButtonType("Generate", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(generateType, ButtonType.CANCEL);
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(8));
+        CheckBox includePlus = new CheckBox("Include plus variants with raw output, snippets, package evidence, CVE/CWE/CVSS, remediation, and AI triage");
+        includePlus.setSelected(includePlusVariantsCheck != null && includePlusVariantsCheck.isSelected());
+        VBox profileOptions = new VBox(8);
+
+        List<String> preselected = selectedReportProfileIds();
+        for (ApiModels.ReportProfileDefinition profile : snapshot.reportProfiles()) {
+            CheckBox option = new CheckBox(profile.label() + " (" + profile.extension() + ")");
+            option.setUserData(profile.id());
+            option.setWrapText(true);
+            option.setSelected(preselected.isEmpty() || preselected.contains(profile.id()));
+            profileOptions.getChildren().add(option);
+        }
+
+        ScrollPane scrollPane = new ScrollPane(profileOptions);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPrefViewportHeight(260);
+        content.getChildren().addAll(
+                labeledSection("Output Profiles"),
+                scrollPane,
+                includePlus
+        );
+        dialog.getDialogPane().setContent(content);
+
+        dialog.setResultConverter(button -> {
+            if (button != generateType) {
+                return null;
+            }
+            List<String> profileIds = new ArrayList<>();
+            profileOptions.getChildren().forEach(node -> {
+                if (node instanceof CheckBox checkBox && checkBox.isSelected() && checkBox.getUserData() instanceof String id) {
+                    profileIds.add(id);
+                }
+            });
+            if (profileIds.isEmpty()) {
+                return null;
+            }
+            if (includePlusVariantsCheck != null) {
+                includePlusVariantsCheck.setSelected(includePlus.isSelected());
+            }
+            syncReportProfileSelection(profileIds);
+            return new ReportGenerationSelection(profileIds, includePlus.isSelected());
+        });
+
+        return dialog.showAndWait().orElse(null);
     }
 
     private void installSelectedPlugin() {
@@ -537,6 +631,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 + System.lineSeparator() + System.lineSeparator()
                 + WorkbenchText.formatScanOverview(latest.activeScan()));
         scansList.setItems(FXCollections.observableArrayList(latest.recentScans()));
+        timelineList.setItems(FXCollections.observableArrayList(latest.recentScans()));
 
         ApiModels.ScanResult activeScan = latest.activeScan();
         currentFindings = activeScan != null ? activeScan.safeFindings() : List.of();
@@ -580,6 +675,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
         if (!currentPlugins.isEmpty()) {
             pluginsList.getSelectionModel().select(0);
         }
+        if (activeScan != null && timelineList != null) {
+            timelineList.getSelectionModel().select(activeScan);
+        }
     }
 
     private void applyFindingFilter() {
@@ -622,6 +720,17 @@ public final class JavaFxWorkbenchLauncher extends Application {
             checkBox.setAccessibleText(profile.description());
             reportProfilesBox.getChildren().add(checkBox);
         }
+    }
+
+    private void syncReportProfileSelection(List<String> selectedIds) {
+        if (reportProfilesBox == null) {
+            return;
+        }
+        reportProfilesBox.getChildren().forEach(node -> {
+            if (node instanceof CheckBox checkBox && checkBox.getUserData() instanceof String id) {
+                checkBox.setSelected(selectedIds.contains(id));
+            }
+        });
     }
 
     private List<String> selectedReportProfileIds() {
@@ -736,5 +845,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
         Label label = new Label(text);
         label.getStyleClass().add("section-label");
         return label;
+    }
+
+    private record ReportGenerationSelection(List<String> profileIds, boolean includePlusVariants) {
     }
 }
