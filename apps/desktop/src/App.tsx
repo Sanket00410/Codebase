@@ -1,6 +1,7 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import {
   createScan,
@@ -48,6 +49,70 @@ type ConsoleEntry = {
   tone: "info" | "success" | "warning" | "danger";
 };
 
+type CommandActionId =
+  | "open-repository"
+  | "open-repository-folder"
+  | "start-scan"
+  | "refresh-runtime"
+  | "sync-advisories"
+  | "toggle-offline-mode"
+  | "toggle-advisory-refresh"
+  | "toggle-tree-dock"
+  | "toggle-inspector-dock"
+  | "toggle-console-dock"
+  | "toggle-inspector-mode"
+  | "open-command-palette"
+  | "open-selected-artifact"
+  | "open-selected-source"
+  | "install-selected-tool"
+  | "install-all-missing-tools"
+  | "switch-dashboard"
+  | "switch-findings"
+  | "switch-dependencies"
+  | "switch-reports"
+  | "switch-plugins"
+  | "show-timeline";
+
+type WorkbenchLayoutState = {
+  activeTab: WorkspaceTabId;
+  inspectorMode: InspectorMode;
+  consoleMode: ConsoleMode;
+  showTreeDock: boolean;
+  showInspectorDock: boolean;
+  showConsoleDock: boolean;
+  leftDockWidth: number;
+  rightDockWidth: number;
+  consoleHeight: number;
+};
+
+type SourcePreviewState = {
+  path: string | null;
+  startLine: number;
+  endLine: number;
+  snippet: string;
+  loading: boolean;
+  error: string | null;
+  origin: "scanner" | "host" | "none";
+};
+
+type CommandDefinition = {
+  id: CommandActionId;
+  label: string;
+  hint: string;
+  shortcut?: string;
+  disabled?: boolean;
+  hidden?: boolean;
+  run: () => void | Promise<void>;
+};
+
+type SourceWindowResult = {
+  path: string;
+  start_line: number;
+  end_line: number;
+  snippet: string;
+  error?: string | null;
+};
+
 const workspaceMeta: Record<WorkspaceTabId, { label: string; eyebrow: string; description: string }> = {
   dashboard: {
     label: "Command Deck",
@@ -84,6 +149,77 @@ const menuLabels: Record<Exclude<MenuId, null>, string> = {
   reports: "Reports",
   help: "Help",
 };
+
+const workbenchLayoutStorageKey = "code-base-scanner.workbench-layout.v2";
+const minLeftDockWidth = 240;
+const maxLeftDockWidth = 520;
+const minRightDockWidth = 300;
+const maxRightDockWidth = 620;
+const minConsoleHeight = 180;
+const maxConsoleHeight = 420;
+const defaultWorkbenchLayout: WorkbenchLayoutState = {
+  activeTab: "dashboard",
+  inspectorMode: "context",
+  consoleMode: "events",
+  showTreeDock: true,
+  showInspectorDock: true,
+  showConsoleDock: true,
+  leftDockWidth: 300,
+  rightDockWidth: 360,
+  consoleHeight: 240,
+};
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function loadWorkbenchLayout(): WorkbenchLayoutState {
+  if (typeof window === "undefined") {
+    return defaultWorkbenchLayout;
+  }
+  try {
+    const raw = window.localStorage.getItem(workbenchLayoutStorageKey);
+    if (!raw) {
+      return defaultWorkbenchLayout;
+    }
+    const parsed = JSON.parse(raw) as Partial<WorkbenchLayoutState>;
+    const nextActiveTab = workspaceTabs.includes(parsed.activeTab as WorkspaceTabId)
+      ? (parsed.activeTab as WorkspaceTabId)
+      : defaultWorkbenchLayout.activeTab;
+    const nextInspectorMode = inspectorModes.includes(parsed.inspectorMode as InspectorMode)
+      ? (parsed.inspectorMode as InspectorMode)
+      : defaultWorkbenchLayout.inspectorMode;
+    const nextConsoleMode = consoleModes.includes(parsed.consoleMode as ConsoleMode)
+      ? (parsed.consoleMode as ConsoleMode)
+      : defaultWorkbenchLayout.consoleMode;
+    return {
+      activeTab: nextActiveTab,
+      inspectorMode: nextInspectorMode,
+      consoleMode: nextConsoleMode,
+      showTreeDock: typeof parsed.showTreeDock === "boolean" ? parsed.showTreeDock : defaultWorkbenchLayout.showTreeDock,
+      showInspectorDock:
+        typeof parsed.showInspectorDock === "boolean"
+          ? parsed.showInspectorDock
+          : defaultWorkbenchLayout.showInspectorDock,
+      showConsoleDock:
+        typeof parsed.showConsoleDock === "boolean" ? parsed.showConsoleDock : defaultWorkbenchLayout.showConsoleDock,
+      leftDockWidth:
+        typeof parsed.leftDockWidth === "number"
+          ? clamp(parsed.leftDockWidth, minLeftDockWidth, maxLeftDockWidth)
+          : defaultWorkbenchLayout.leftDockWidth,
+      rightDockWidth:
+        typeof parsed.rightDockWidth === "number"
+          ? clamp(parsed.rightDockWidth, minRightDockWidth, maxRightDockWidth)
+          : defaultWorkbenchLayout.rightDockWidth,
+      consoleHeight:
+        typeof parsed.consoleHeight === "number"
+          ? clamp(parsed.consoleHeight, minConsoleHeight, maxConsoleHeight)
+          : defaultWorkbenchLayout.consoleHeight,
+    };
+  } catch {
+    return defaultWorkbenchLayout;
+  }
+}
 
 function formatTimestamp(value?: string | null): string {
   if (!value) {
@@ -163,10 +299,12 @@ function renderSessionInspector({
 function renderFindingInspector({
   finding,
   findingPath,
+  sourcePreview,
   openTarget,
 }: {
   finding: Finding | null;
   findingPath: string | null;
+  sourcePreview: SourcePreviewState;
   openTarget: (path: string) => Promise<void>;
 }) {
   if (!finding) {
@@ -209,15 +347,39 @@ function renderFindingInspector({
           <strong>{finding.location?.line || "n/a"}</strong>
           <p>{finding.location?.column ? `Column ${finding.location.column}` : "Column not provided by the scanner."}</p>
         </div>
-        {finding.location?.snippet ? (
-          <pre className="code-block">{finding.location.snippet}</pre>
-        ) : (
-          <div className="empty-inline">No code snippet was attached to this finding.</div>
-        )}
         {findingPath ? (
           <button className="button secondary button-inline" onClick={() => void openTarget(findingPath)}>
             Open source file
           </button>
+        ) : null}
+      </section>
+
+      <section className="inspector-section">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Source Preview</span>
+            <h3>{sourcePreview.path ? compactPath(sourcePreview.path) : "No source preview"}</h3>
+          </div>
+          <span className="meta-chip">{sourcePreview.origin}</span>
+        </div>
+        {sourcePreview.loading ? <div className="empty-inline">Loading source context from the desktop host...</div> : null}
+        {!sourcePreview.loading && sourcePreview.error ? <div className="empty-inline">{sourcePreview.error}</div> : null}
+        {!sourcePreview.loading && !sourcePreview.error && sourcePreview.snippet ? (
+          <>
+            <div className="summary-card">
+              <span className="detail-label">Window</span>
+              <strong>
+                {sourcePreview.startLine && sourcePreview.endLine
+                  ? `Lines ${sourcePreview.startLine}-${sourcePreview.endLine}`
+                  : "Scanner provided snippet"}
+              </strong>
+              <p>{sourcePreview.path || "No source path available for this preview."}</p>
+            </div>
+            <pre className="code-block">{sourcePreview.snippet}</pre>
+          </>
+        ) : null}
+        {!sourcePreview.loading && !sourcePreview.error && !sourcePreview.snippet ? (
+          <div className="empty-inline">No code snippet is available for this finding.</div>
         ) : null}
       </section>
 
@@ -462,10 +624,12 @@ function renderPluginInspector({
   plugin,
   install,
   loading,
+  openTarget,
 }: {
   plugin: PluginDescriptor | null;
   install: (toolName: string) => Promise<void>;
   loading: boolean;
+  openTarget: (path: string) => Promise<void>;
 }) {
   if (!plugin) {
     return <div className="empty-inline">Select a plugin to inspect runtime metadata.</div>;
@@ -503,6 +667,11 @@ function renderPluginInspector({
         {!plugin.available && plugin.metadata.install_strategy !== "system" ? (
           <button className="button primary button-inline" disabled={loading} onClick={() => void install(plugin.metadata.name)}>
             Install this tool
+          </button>
+        ) : null}
+        {plugin.binary_status?.resolved_path ? (
+          <button className="button secondary button-inline" onClick={() => void openTarget(plugin.binary_status!.resolved_path!)}>
+            Open binary path
           </button>
         ) : null}
       </section>
@@ -596,12 +765,12 @@ function scanDuration(scan: ScanResult): string {
 }
 
 export default function App() {
+  const [layoutState, setLayoutState] = useState<WorkbenchLayoutState>(() => loadWorkbenchLayout());
   const [backendReady, setBackendReady] = useState(false);
   const [repositoryPath, setRepositoryPath] = useState("");
   const [plugins, setPlugins] = useState<PluginDescriptor[]>([]);
   const [recentScans, setRecentScans] = useState<ScanResult[]>([]);
   const [scan, setScan] = useState<ScanResult | null>(null);
-  const [activeTab, setActiveTab] = useState<WorkspaceTabId>("dashboard");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [toolFilter, setToolFilter] = useState<ToolFilter>("all");
   const [findingQuery, setFindingQuery] = useState("");
@@ -618,13 +787,40 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
-  const [consoleMode, setConsoleMode] = useState<ConsoleMode>("events");
-  const [inspectorMode, setInspectorMode] = useState<InspectorMode>("context");
-  const [showTreeDock, setShowTreeDock] = useState(true);
-  const [showInspectorDock, setShowInspectorDock] = useState(true);
-  const [showConsoleDock, setShowConsoleDock] = useState(true);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [sourcePreview, setSourcePreview] = useState<SourcePreviewState>({
+    path: null,
+    startLine: 0,
+    endLine: 0,
+    snippet: "",
+    loading: false,
+    error: null,
+    origin: "none",
+  });
+  const [resizeState, setResizeState] = useState<{ kind: "left" | "right" | "console"; start: number; initial: number } | null>(null);
 
   const menuHostRef = useRef<HTMLDivElement | null>(null);
+  const commandPaletteRef = useRef<HTMLDivElement | null>(null);
+
+  const activeTab = layoutState.activeTab;
+  const inspectorMode = layoutState.inspectorMode;
+  const consoleMode = layoutState.consoleMode;
+  const showTreeDock = layoutState.showTreeDock;
+  const showInspectorDock = layoutState.showInspectorDock;
+  const showConsoleDock = layoutState.showConsoleDock;
+  const leftDockWidth = layoutState.leftDockWidth;
+  const rightDockWidth = layoutState.rightDockWidth;
+  const consoleHeight = layoutState.consoleHeight;
+
+  const updateLayoutState = (
+    updater: Partial<WorkbenchLayoutState> | ((current: WorkbenchLayoutState) => Partial<WorkbenchLayoutState>),
+  ) => {
+    setLayoutState((current) => ({
+      ...current,
+      ...(typeof updater === "function" ? updater(current) : updater),
+    }));
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -663,6 +859,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    window.localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(layoutState));
+  }, [layoutState]);
+
+  useEffect(() => {
     if (!scan || scan.status === "completed" || scan.status === "failed") {
       return;
     }
@@ -680,17 +880,64 @@ export default function App() {
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
-      if (!menuHostRef.current) {
-        return;
+      if (menuHostRef.current && !menuHostRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
       }
-      if (menuHostRef.current.contains(event.target as Node)) {
-        return;
+      if (commandPaletteRef.current && !commandPaletteRef.current.contains(event.target as Node)) {
+        setCommandPaletteOpen(false);
       }
-      setOpenMenu(null);
     };
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, []);
+
+  useEffect(() => {
+    if (!resizeState) {
+      return;
+    }
+    const handlePointerMove = (event: PointerEvent) => {
+      if (resizeState.kind === "left") {
+        updateLayoutState({
+          leftDockWidth: clamp(resizeState.initial + (event.clientX - resizeState.start), minLeftDockWidth, maxLeftDockWidth),
+        });
+        return;
+      }
+      if (resizeState.kind === "right") {
+        updateLayoutState({
+          rightDockWidth: clamp(resizeState.initial + (resizeState.start - event.clientX), minRightDockWidth, maxRightDockWidth),
+        });
+        return;
+      }
+      updateLayoutState({
+        consoleHeight: clamp(resizeState.initial + (resizeState.start - event.clientY), minConsoleHeight, maxConsoleHeight),
+      });
+    };
+    const handlePointerUp = () => setResizeState(null);
+    document.body.style.cursor = resizeState.kind === "console" ? "row-resize" : "col-resize";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      document.body.style.cursor = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [resizeState]);
+
+  const setActiveTab = (nextTab: WorkspaceTabId) => updateLayoutState({ activeTab: nextTab });
+  const setInspectorMode = (nextMode: InspectorMode) => updateLayoutState({ inspectorMode: nextMode });
+  const setConsoleMode = (nextMode: ConsoleMode) => updateLayoutState({ consoleMode: nextMode });
+  const setShowTreeDock = (nextValue: boolean | ((current: boolean) => boolean)) =>
+    updateLayoutState((current) => ({
+      showTreeDock: typeof nextValue === "function" ? nextValue(current.showTreeDock) : nextValue,
+    }));
+  const setShowInspectorDock = (nextValue: boolean | ((current: boolean) => boolean)) =>
+    updateLayoutState((current) => ({
+      showInspectorDock: typeof nextValue === "function" ? nextValue(current.showInspectorDock) : nextValue,
+    }));
+  const setShowConsoleDock = (nextValue: boolean | ((current: boolean) => boolean)) =>
+    updateLayoutState((current) => ({
+      showConsoleDock: typeof nextValue === "function" ? nextValue(current.showConsoleDock) : nextValue,
+    }));
 
   const refreshState = async () => {
     const [pluginData, resultData] = await Promise.all([getPlugins(), listResults()]);
@@ -825,16 +1072,22 @@ export default function App() {
 
   const missingTools = useMemo(() => plugins.filter((plugin) => !plugin.available), [plugins]);
   const installedTools = useMemo(() => plugins.filter((plugin) => plugin.available), [plugins]);
+  const installableMissingTools = useMemo(
+    () => missingTools.filter((plugin) => plugin.metadata.install_strategy !== "system"),
+    [missingTools],
+  );
+  const systemManagedMissingTools = useMemo(
+    () => missingTools.filter((plugin) => plugin.metadata.install_strategy === "system"),
+    [missingTools],
+  );
   const runtimeSnapshot = useMemo(() => {
-    const installableMissing = missingTools.filter((plugin) => plugin.metadata.install_strategy !== "system").length;
-    const systemManagedMissing = missingTools.length - installableMissing;
     return [
       { label: "Registered adapters", value: plugins.length, detail: "Scanner plugins loaded into the runtime." },
       { label: "Installed engines", value: installedTools.length, detail: "Local binaries ready for execution." },
-      { label: "Installable gaps", value: installableMissing, detail: "Can be provisioned from the plugin manager." },
-      { label: "System dependencies", value: systemManagedMissing, detail: "Require host-level installation." },
+      { label: "Installable gaps", value: installableMissingTools.length, detail: "Can be provisioned from the plugin manager." },
+      { label: "System dependencies", value: systemManagedMissingTools.length, detail: "Require host-level installation." },
     ];
-  }, [installedTools.length, missingTools, plugins.length]);
+  }, [installedTools.length, installableMissingTools.length, plugins.length, systemManagedMissingTools.length]);
   const runtimeCategories = useMemo(() => {
     const counts = new Map<string, number>();
     for (const plugin of plugins) {
@@ -960,6 +1213,17 @@ export default function App() {
     null;
   const selectedExecution =
     scan?.tools.find((tool) => tool.tool === selectedExecutionTool) || scan?.tools[0] || null;
+  const selectedDependencyFindings = useMemo(() => {
+    if (!scan || !selectedDependency) {
+      return [];
+    }
+    const dependencyId = selectedDependency.id.toLowerCase();
+    const dependencyLabel = dependencyName(selectedDependency).toLowerCase();
+    return scan.findings.filter((finding) => {
+      const packageName = finding.package_name?.toLowerCase();
+      return packageName === dependencyId || packageName === dependencyLabel;
+    });
+  }, [scan, selectedDependency]);
 
   useEffect(() => {
     if (!filteredFindings.length) {
@@ -1012,83 +1276,353 @@ export default function App() {
     }
   }, [scan, selectedExecutionTool]);
 
-  const menuDefinitions: Record<Exclude<MenuId, null>, MenuItem[]> = {
-    file: [
-      { label: "Open Repository...", hint: "Select a local repository root", action: () => void chooseRepository() },
-      {
+  useEffect(() => {
+    if (!selectedFinding?.package_name || !dependencyNodes.length) {
+      return;
+    }
+    const target = selectedFinding.package_name.toLowerCase();
+    const matchingDependency = dependencyNodes.find((node) => {
+      const nodeId = node.id.toLowerCase();
+      const nodeName = dependencyName(node).toLowerCase();
+      return nodeId === target || nodeName === target;
+    });
+    if (matchingDependency) {
+      setSelectedDependencyId(matchingDependency.id);
+    }
+  }, [dependencyNodes, selectedFinding?.finding_id, selectedFinding?.package_name]);
+
+  useEffect(() => {
+    if (activeTab !== "dependencies" || selectedFindingId || !selectedDependencyFindings.length) {
+      return;
+    }
+    setSelectedFindingId(selectedDependencyFindings[0].finding_id);
+  }, [activeTab, selectedDependencyFindings, selectedFindingId]);
+
+  useEffect(() => {
+    if (!selectedFinding || !selectedFindingPath) {
+      setSourcePreview({
+        path: null,
+        startLine: 0,
+        endLine: 0,
+        snippet: "",
+        loading: false,
+        error: null,
+        origin: "none",
+      });
+      return;
+    }
+    if (selectedFinding.location?.snippet) {
+      const lineNumber = selectedFinding.location.line || 0;
+      setSourcePreview({
+        path: selectedFindingPath,
+        startLine: lineNumber,
+        endLine: lineNumber,
+        snippet: selectedFinding.location.snippet,
+        loading: false,
+        error: null,
+        origin: "scanner",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setSourcePreview({
+      path: selectedFindingPath,
+      startLine: 0,
+      endLine: 0,
+      snippet: "",
+      loading: true,
+      error: null,
+      origin: "host",
+    });
+
+    void invoke<SourceWindowResult>("read_source_window", {
+      path: selectedFindingPath,
+      line: selectedFinding.location?.line ?? null,
+      before: 8,
+      after: 12,
+    })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setSourcePreview({
+          path: result.path,
+          startLine: result.start_line,
+          endLine: result.end_line,
+          snippet: result.snippet,
+          loading: false,
+          error: result.error || null,
+          origin: "host",
+        });
+      })
+      .catch((cause) => {
+        if (cancelled) {
+          return;
+        }
+        setSourcePreview({
+          path: selectedFindingPath,
+          startLine: 0,
+          endLine: 0,
+          snippet: "",
+          loading: false,
+          error: cause instanceof Error ? cause.message : String(cause),
+          origin: "host",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFinding, selectedFindingPath]);
+
+  const commandRegistry: Record<CommandActionId, CommandDefinition> = {
+      "open-repository": {
+        id: "open-repository",
+        label: "Open Repository...",
+        hint: "Select a local repository root",
+        shortcut: "Ctrl/Cmd+O",
+        run: () => void chooseRepository(),
+      },
+      "open-repository-folder": {
+        id: "open-repository-folder",
         label: "Open Repository Folder",
         hint: repositoryPath ? summarizePath(repositoryPath) : "No repository selected",
         disabled: !repositoryPath,
-        action: () => {
+        run: () => {
           if (repositoryPath) {
             void openTarget(repositoryPath);
           }
         },
       },
-      {
+      "start-scan": {
+        id: "start-scan",
+        label: "Start Scan",
+        hint: repositoryPath || "Choose a repository first",
+        shortcut: "Ctrl/Cmd+Enter",
+        disabled: !backendReady || !repositoryPath || loading,
+        run: () => void runScan(),
+      },
+      "refresh-runtime": {
+        id: "refresh-runtime",
+        label: "Refresh Runtime State",
+        hint: "Reload scans and plugin status",
+        shortcut: "Ctrl/Cmd+R",
+        disabled: !backendReady || loading,
+        run: () => void refreshState(),
+      },
+      "sync-advisories": {
+        id: "sync-advisories",
+        label: "Update Advisory Databases",
+        hint: offlineMode ? "Offline mode enabled" : "Sync GitHub and NVD sources",
+        disabled: offlineMode || loading,
+        run: () => void syncAdvisories(),
+      },
+      "toggle-offline-mode": {
+        id: "toggle-offline-mode",
+        label: offlineMode ? "Disable Offline Mode" : "Enable Offline Mode",
+        hint: "Toggle network-backed updates during scan",
+        run: () => setOfflineMode((value) => !value),
+      },
+      "toggle-advisory-refresh": {
+        id: "toggle-advisory-refresh",
+        label: refreshAdvisoriesOnScan ? "Disable Advisory Refresh" : "Refresh Advisories Before Scan",
+        hint: offlineMode ? "Unavailable while offline" : "Sync advisories before launching scans",
+        disabled: offlineMode,
+        run: () => setRefreshAdvisoriesOnScan((value) => !value),
+      },
+      "toggle-tree-dock": {
+        id: "toggle-tree-dock",
+        label: showTreeDock ? "Hide Session Tree" : "Show Session Tree",
+        hint: showTreeDock ? "Collapse the left dock" : "Reveal the left dock",
+        shortcut: "Ctrl/Cmd+B",
+        run: () => setShowTreeDock((value) => !value),
+      },
+      "toggle-inspector-dock": {
+        id: "toggle-inspector-dock",
+        label: showInspectorDock ? "Hide Inspector" : "Show Inspector",
+        hint: showInspectorDock ? "Collapse the right dock" : "Reveal the right dock",
+        shortcut: "Ctrl/Cmd+I",
+        run: () => setShowInspectorDock((value) => !value),
+      },
+      "toggle-console-dock": {
+        id: "toggle-console-dock",
+        label: showConsoleDock ? "Hide Event Console" : "Show Event Console",
+        hint: showConsoleDock ? "Collapse the bottom dock" : "Reveal the bottom dock",
+        shortcut: "Ctrl/Cmd+J",
+        run: () => setShowConsoleDock((value) => !value),
+      },
+      "toggle-inspector-mode": {
+        id: "toggle-inspector-mode",
+        label: inspectorMode === "runtime" ? "Switch To Context Inspector" : "Switch To Runtime Inspector",
+        hint: "Toggle the right dock between selection detail and runtime detail",
+        run: () => setInspectorMode(inspectorMode === "runtime" ? "context" : "runtime"),
+      },
+      "open-command-palette": {
+        id: "open-command-palette",
+        label: "Open Command Palette",
+        hint: "Search and run desktop actions",
+        shortcut: "Ctrl/Cmd+P",
+        run: () => {
+          setCommandPaletteOpen(true);
+          setCommandQuery("");
+        },
+      },
+      "open-selected-artifact": {
+        id: "open-selected-artifact",
         label: "Open Active Report",
         hint: selectedArtifact ? compactPath(selectedArtifact.path) : "No report selected",
         disabled: !selectedArtifact,
-        action: () => {
+        run: () => {
           if (selectedArtifact) {
             void openTarget(selectedArtifact.path);
           }
         },
       },
-    ],
-    scan: [
-      { label: "Start Scan", hint: repositoryPath || "Choose a repository first", disabled: !backendReady || !repositoryPath || loading, action: () => void runScan() },
-      { label: "Refresh Runtime State", hint: "Reload scans and plugin status", disabled: !backendReady || loading, action: () => void refreshState() },
-      { label: offlineMode ? "Disable Offline Mode" : "Enable Offline Mode", hint: "Toggle network-backed updates during scan", action: () => setOfflineMode((value) => !value) },
-      {
-        label: refreshAdvisoriesOnScan ? "Disable Advisory Refresh" : "Refresh Advisories Before Scan",
-        hint: offlineMode ? "Unavailable while offline" : "Sync GitHub/NVD data before launching scans",
-        disabled: offlineMode,
-        action: () => setRefreshAdvisoriesOnScan((value) => !value),
-      },
-    ],
-    view: [
-      { label: "Show Session Tree", hint: showTreeDock ? "Currently visible" : "Reveal left dock", action: () => setShowTreeDock((value) => !value) },
-      { label: "Show Inspector", hint: showInspectorDock ? "Currently visible" : "Reveal right dock", action: () => setShowInspectorDock((value) => !value) },
-      { label: "Show Event Console", hint: showConsoleDock ? "Currently visible" : "Reveal bottom dock", action: () => setShowConsoleDock((value) => !value) },
-      { label: "Open Finding Explorer", hint: "Switch the center workspace to findings", action: () => setActiveTab("findings") },
-    ],
-    tools: [
-      { label: "Install All Missing", hint: `${missingTools.length} missing tools`, disabled: !missingTools.length || loading, action: () => void installAllMissingTools() },
-      { label: "Update Advisory Databases", hint: offlineMode ? "Offline mode enabled" : "Sync GitHub/NVD sources", disabled: offlineMode || loading, action: () => void syncAdvisories() },
-      { label: "Open Plugin Manager", hint: "Review scanner adapters and binary paths", action: () => setActiveTab("plugins") },
-      { label: "Switch Inspector to Runtime", hint: "Show runtime and quick actions in the right dock", action: () => setInspectorMode("runtime") },
-    ],
-    reports: [
-      { label: "Open Report Explorer", hint: "Browse reports and raw payloads", action: () => setActiveTab("reports") },
-      {
-        label: "Open Latest HTML Report",
-        hint: primaryArtifacts.find((artifact) => artifact.kind === "report-html") ? "report.html" : "No HTML report selected",
-        disabled: !primaryArtifacts.find((artifact) => artifact.kind === "report-html"),
-        action: () => {
-          const artifact = primaryArtifacts.find((item) => item.kind === "report-html");
-          if (artifact) {
-            void openTarget(artifact.path);
+      "open-selected-source": {
+        id: "open-selected-source",
+        label: "Open Selected Source File",
+        hint: selectedFindingPath ? summarizePath(selectedFindingPath) : "No source file selected",
+        disabled: !selectedFindingPath,
+        run: () => {
+          if (selectedFindingPath) {
+            void openTarget(selectedFindingPath);
           }
         },
       },
-      {
-        label: "Open Latest JSON Report",
-        hint: primaryArtifacts.find((artifact) => artifact.kind === "report-json") ? "report.json" : "No JSON report selected",
-        disabled: !primaryArtifacts.find((artifact) => artifact.kind === "report-json"),
-        action: () => {
-          const artifact = primaryArtifacts.find((item) => item.kind === "report-json");
-          if (artifact) {
-            void openTarget(artifact.path);
+      "install-selected-tool": {
+        id: "install-selected-tool",
+        label: "Install Selected Tool",
+        hint: selectedPlugin ? selectedPlugin.metadata.display_name : "No plugin selected",
+        disabled: !selectedPlugin || selectedPlugin.available || selectedPlugin.metadata.install_strategy === "system" || loading,
+        run: () => {
+          if (selectedPlugin) {
+            void installMissingTool(selectedPlugin.metadata.name);
           }
         },
       },
-    ],
-    help: [
-      { label: "Open Command Deck", hint: "Return to the primary workspace", action: () => setActiveTab("dashboard") },
-      { label: "Open Dependency Graph", hint: "Inspect package inventory and graph nodes", action: () => setActiveTab("dependencies") },
-      { label: "Show Scan Timeline", hint: `${recentScans.length} persisted runs`, action: () => setConsoleMode("timeline") },
-    ],
+      "install-all-missing-tools": {
+        id: "install-all-missing-tools",
+        label: "Install All Missing Tools",
+        hint: `${installableMissingTools.length} installable gaps`,
+        disabled: !installableMissingTools.length || loading,
+        run: () => void installAllMissingTools(),
+      },
+      "switch-dashboard": {
+        id: "switch-dashboard",
+        label: "Open Command Deck",
+        hint: "Return to the primary workspace",
+        shortcut: "Ctrl/Cmd+1",
+        run: () => setActiveTab("dashboard"),
+      },
+      "switch-findings": {
+        id: "switch-findings",
+        label: "Open Finding Explorer",
+        hint: "Inspect normalized findings and evidence",
+        shortcut: "Ctrl/Cmd+2",
+        run: () => setActiveTab("findings"),
+      },
+      "switch-dependencies": {
+        id: "switch-dependencies",
+        label: "Open Dependency Graph",
+        hint: "Inspect package inventory and graph nodes",
+        shortcut: "Ctrl/Cmd+3",
+        run: () => setActiveTab("dependencies"),
+      },
+      "switch-reports": {
+        id: "switch-reports",
+        label: "Open Report Explorer",
+        hint: "Browse reports and raw payloads",
+        shortcut: "Ctrl/Cmd+4",
+        run: () => setActiveTab("reports"),
+      },
+      "switch-plugins": {
+        id: "switch-plugins",
+        label: "Open Plugin Manager",
+        hint: "Review scanner adapters and binary paths",
+        shortcut: "Ctrl/Cmd+5",
+        run: () => setActiveTab("plugins"),
+      },
+      "show-timeline": {
+        id: "show-timeline",
+        label: "Show Scan Timeline",
+        hint: `${recentScans.length} persisted runs`,
+        run: () => setConsoleMode("timeline"),
+      },
+    };
+
+  const dispatchCommand = (commandId: CommandActionId) => {
+    const command = commandRegistry[commandId];
+    if (!command || command.disabled) {
+      return;
+    }
+    setOpenMenu(null);
+    setCommandPaletteOpen(false);
+    setCommandQuery("");
+    try {
+      void Promise.resolve(command.run()).catch((cause) => {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const menuDefinitions: Record<Exclude<MenuId, null>, MenuItem[]> = {
+    file: (["open-repository", "open-repository-folder", "open-selected-artifact"] as CommandActionId[]).map((commandId) => {
+      const command = commandRegistry[commandId];
+      return {
+        label: command.label,
+        hint: command.shortcut ? `${command.hint} | ${command.shortcut}` : command.hint,
+        disabled: command.disabled,
+        action: () => dispatchCommand(command.id),
+      };
+    }),
+    scan: (["start-scan", "refresh-runtime", "toggle-offline-mode", "toggle-advisory-refresh"] as CommandActionId[]).map((commandId) => {
+      const command = commandRegistry[commandId];
+      return {
+        label: command.label,
+        hint: command.shortcut ? `${command.hint} | ${command.shortcut}` : command.hint,
+        disabled: command.disabled,
+        action: () => dispatchCommand(command.id),
+      };
+    }),
+    view: (["toggle-tree-dock", "toggle-inspector-dock", "toggle-console-dock", "switch-findings"] as CommandActionId[]).map((commandId) => {
+      const command = commandRegistry[commandId];
+      return {
+        label: command.label,
+        hint: command.shortcut ? `${command.hint} | ${command.shortcut}` : command.hint,
+        disabled: command.disabled,
+        action: () => dispatchCommand(command.id),
+      };
+    }),
+    tools: (["install-all-missing-tools", "sync-advisories", "switch-plugins", "toggle-inspector-mode"] as CommandActionId[]).map((commandId) => {
+      const command = commandRegistry[commandId];
+      return {
+        label: command.label,
+        hint: command.shortcut ? `${command.hint} | ${command.shortcut}` : command.hint,
+        disabled: command.disabled,
+        action: () => dispatchCommand(command.id),
+      };
+    }),
+    reports: (["switch-reports", "open-selected-artifact"] as CommandActionId[]).map((commandId) => {
+      const command = commandRegistry[commandId];
+      return {
+        label: command.label,
+        hint: command.shortcut ? `${command.hint} | ${command.shortcut}` : command.hint,
+        disabled: command.disabled,
+        action: () => dispatchCommand(command.id),
+      };
+    }),
+    help: (["switch-dashboard", "switch-dependencies", "show-timeline", "open-command-palette"] as CommandActionId[]).map((commandId) => {
+      const command = commandRegistry[commandId];
+      return {
+        label: command.label,
+        hint: command.shortcut ? `${command.hint} | ${command.shortcut}` : command.hint,
+        disabled: command.disabled,
+        action: () => dispatchCommand(command.id),
+      };
+    }),
   };
 
   const getRuntimeToneClass = (tone: "info" | "success" | "warning" | "danger") => {
@@ -1207,6 +1741,161 @@ export default function App() {
 
   const selectedRepositoryName = compactPath(repositoryPath || scan?.repository_path || "No repository selected");
   const currentTabMeta = workspaceMeta[activeTab];
+  const paletteCommands = useMemo(() => {
+    const needle = commandQuery.trim().toLowerCase();
+    return Object.values(commandRegistry)
+      .filter((command) => !command.hidden)
+      .filter((command) => {
+        if (!needle) {
+          return true;
+        }
+        return `${command.label} ${command.hint} ${command.shortcut || ""}`.toLowerCase().includes(needle);
+      })
+      .sort((left, right) => {
+        if (Boolean(left.disabled) !== Boolean(right.disabled)) {
+          return left.disabled ? 1 : -1;
+        }
+        return left.label.localeCompare(right.label);
+      });
+  }, [commandQuery, commandRegistry]);
+  const primaryPaletteCommand = paletteCommands[0] || null;
+  const workbenchStyle = useMemo(() => {
+    if (showTreeDock && showInspectorDock) {
+      return {
+        gridTemplateColumns: `${leftDockWidth}px 8px minmax(0, 1fr) 8px ${rightDockWidth}px`,
+      };
+    }
+    if (showTreeDock) {
+      return {
+        gridTemplateColumns: `${leftDockWidth}px 8px minmax(0, 1fr)`,
+      };
+    }
+    if (showInspectorDock) {
+      return {
+        gridTemplateColumns: `minmax(0, 1fr) 8px ${rightDockWidth}px`,
+      };
+    }
+    return {
+      gridTemplateColumns: "minmax(0, 1fr)",
+    };
+  }, [leftDockWidth, rightDockWidth, showInspectorDock, showTreeDock]);
+
+  useEffect(() => {
+    const commandMap: Record<string, CommandActionId> = {
+      "menu.open-repository": "open-repository",
+      "menu.start-scan": "start-scan",
+      "menu.refresh-runtime": "refresh-runtime",
+      "menu.toggle-tree-dock": "toggle-tree-dock",
+      "menu.toggle-inspector-dock": "toggle-inspector-dock",
+      "menu.toggle-console-dock": "toggle-console-dock",
+      "menu.switch-reports": "switch-reports",
+      "menu.file.open-selected-artifact": "open-selected-artifact",
+      "menu.reports.open-selected-artifact": "open-selected-artifact",
+    };
+    let unlisten: (() => void) | null = null;
+    void listen<{ id: string }>("desktop-command", (event) => {
+      const nextCommand = commandMap[event.payload.id];
+      if (nextCommand) {
+        dispatchCommand(nextCommand);
+      }
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [dispatchCommand]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditable =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable ||
+          target.getAttribute("role") === "textbox");
+
+      if (event.key === "Escape") {
+        if (openMenu) {
+          setOpenMenu(null);
+        }
+        if (commandPaletteOpen) {
+          setCommandPaletteOpen(false);
+          setCommandQuery("");
+        }
+        return;
+      }
+
+      if (commandPaletteOpen && event.key === "Enter" && primaryPaletteCommand) {
+        event.preventDefault();
+        dispatchCommand(primaryPaletteCommand.id);
+        return;
+      }
+
+      const primaryModifier = event.ctrlKey || event.metaKey;
+      if (!primaryModifier) {
+        return;
+      }
+      if (isEditable && event.key !== "Enter" && event.key.toLowerCase() !== "p") {
+        return;
+      }
+
+      const loweredKey = event.key.toLowerCase();
+      if (loweredKey === "o") {
+        event.preventDefault();
+        dispatchCommand("open-repository");
+        return;
+      }
+      if (loweredKey === "r") {
+        event.preventDefault();
+        dispatchCommand("refresh-runtime");
+        return;
+      }
+      if (loweredKey === "b") {
+        event.preventDefault();
+        dispatchCommand("toggle-tree-dock");
+        return;
+      }
+      if (loweredKey === "i") {
+        event.preventDefault();
+        dispatchCommand("toggle-inspector-dock");
+        return;
+      }
+      if (loweredKey === "j") {
+        event.preventDefault();
+        dispatchCommand("toggle-console-dock");
+        return;
+      }
+      if (loweredKey === "p") {
+        event.preventDefault();
+        dispatchCommand("open-command-palette");
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        dispatchCommand("start-scan");
+        return;
+      }
+
+      const tabCommandMap: Record<string, CommandActionId> = {
+        "1": "switch-dashboard",
+        "2": "switch-findings",
+        "3": "switch-dependencies",
+        "4": "switch-reports",
+        "5": "switch-plugins",
+      };
+      if (tabCommandMap[event.key]) {
+        event.preventDefault();
+        dispatchCommand(tabCommandMap[event.key]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [commandPaletteOpen, dispatchCommand, openMenu, primaryPaletteCommand]);
 
   const executeMenuItem = (item: MenuItem) => {
     if (item.disabled) {
@@ -1215,6 +1904,16 @@ export default function App() {
     item.action();
     setOpenMenu(null);
   };
+
+  const startResize =
+    (kind: "left" | "right" | "console") => (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setResizeState({
+        kind,
+        start: kind === "console" ? event.clientY : event.clientX,
+        initial: kind === "left" ? leftDockWidth : kind === "right" ? rightDockWidth : consoleHeight,
+      });
+    };
 
   const renderDashboard = () => {
     const progressValue = scan ? scan.progress_percent : 0;
@@ -1532,6 +2231,61 @@ export default function App() {
       <section className="panel work-card">
         <div className="section-heading">
           <div>
+            <span className="eyebrow">Selected Output</span>
+            <h3>{reportInspectorMode === "artifact" ? "Artifact preview" : "Execution preview"}</h3>
+          </div>
+        </div>
+        {reportInspectorMode === "artifact" ? (
+          selectedArtifact ? (
+            <div className="summary-grid">
+              <article className="summary-card">
+                <span className="detail-label">Artifact</span>
+                <strong>{compactPath(selectedArtifact.path)}</strong>
+                <p>{selectedArtifact.kind}</p>
+              </article>
+              <article className="summary-card">
+                <span className="detail-label">Media type</span>
+                <strong>{selectedArtifact.media_type}</strong>
+                <p>{selectedArtifact.path}</p>
+              </article>
+              <article className="summary-card">
+                <span className="detail-label">Action</span>
+                <strong>Open artifact</strong>
+                <p>Launch the selected report or raw payload in the desktop shell.</p>
+                <button className="button secondary button-inline" onClick={() => dispatchCommand("open-selected-artifact")}>
+                  Open selected artifact
+                </button>
+              </article>
+            </div>
+          ) : (
+            <div className="empty-inline">Select an artifact to preview its detail here.</div>
+          )
+        ) : selectedExecution ? (
+          <div className="summary-grid">
+            <article className="summary-card">
+              <span className="detail-label">Tool</span>
+              <strong>{selectedExecution.tool}</strong>
+              <p>{selectedExecution.category}</p>
+            </article>
+            <article className="summary-card">
+              <span className="detail-label">Exit code</span>
+              <strong>{selectedExecution.exit_code}</strong>
+              <p>{formatDuration(selectedExecution.duration_seconds)} elapsed.</p>
+            </article>
+            <article className="summary-card">
+              <span className="detail-label">Command</span>
+              <strong>{selectedExecution.binary_path || "n/a"}</strong>
+              <p>{clipText(selectedExecution.command?.join(" "), 120) || "Command line not captured."}</p>
+            </article>
+          </div>
+        ) : (
+          <div className="empty-inline">Select a tool execution to preview its runtime detail here.</div>
+        )}
+      </section>
+
+      <section className="panel work-card">
+        <div className="section-heading">
+          <div>
             <span className="eyebrow">Artifacts and Raw Output</span>
             <h3>Report explorer</h3>
           </div>
@@ -1636,104 +2390,133 @@ export default function App() {
     </div>
   );
 
-  const renderPlugins = () => (
-    <div className="workspace-scroll">
-      <section className="panel work-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Plugin Lifecycle</span>
-            <h3>Scanner runtime manager</h3>
+  const renderPlugins = () => {
+    const pluginSections = [
+      {
+        key: "installed",
+        label: "Installed engines",
+        description: "Scanner binaries already available to the local runtime.",
+        items: toolFilter === "missing" ? [] : installedTools,
+      },
+      {
+        key: "installable",
+        label: "Installable gaps",
+        description: "Missing adapters that can be provisioned directly by the app.",
+        items: toolFilter === "installed" ? [] : installableMissingTools,
+      },
+      {
+        key: "system",
+        label: "System-managed gaps",
+        description: "Host-level tools that still require manual installation.",
+        items: toolFilter === "installed" ? [] : systemManagedMissingTools,
+      },
+    ];
+
+    return (
+      <div className="workspace-scroll">
+        <section className="panel work-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Plugin Lifecycle</span>
+              <h3>Scanner runtime manager</h3>
+            </div>
+            <div className="pill-row">
+              {toolFilters.map((filterValue) => (
+                <button
+                  key={filterValue}
+                  className={`filter-pill ${toolFilter === filterValue ? "active" : ""}`}
+                  onClick={() => setToolFilter(filterValue)}
+                >
+                  {filterValue}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="pill-row">
-            {toolFilters.map((filterValue) => (
-              <button
-                key={filterValue}
-                className={`filter-pill ${toolFilter === filterValue ? "active" : ""}`}
-                onClick={() => setToolFilter(filterValue)}
-              >
-                {filterValue}
-              </button>
+          <div className="summary-grid">
+            {runtimeSnapshot.map((metric) => (
+              <article key={metric.label} className="summary-card">
+                <span className="detail-label">{metric.label}</span>
+                <strong>{metric.value}</strong>
+                <p>{metric.detail}</p>
+              </article>
             ))}
           </div>
-        </div>
-        <div className="summary-grid">
-          {runtimeSnapshot.map((metric) => (
-            <article key={metric.label} className="summary-card">
-              <span className="detail-label">{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <p>{metric.detail}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        </section>
 
-      <section className="panel work-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Adapters</span>
-            <h3>Installed and missing tools</h3>
-          </div>
-          <button
-            className="button secondary"
-            disabled={!missingTools.length || loading}
-            onClick={() => void installAllMissingTools()}
-          >
-            Install all missing
-          </button>
-        </div>
-        <div className="plugin-grid">
-          {filteredPlugins.length ? (
-            filteredPlugins.map((plugin) => (
-              <article
-                key={plugin.metadata.name}
-                className={`plugin-card ${selectedPlugin?.metadata.name === plugin.metadata.name ? "active" : ""}`}
-              >
+        {pluginSections.map((section) => (
+          <section key={section.key} className="panel work-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Adapters</span>
+                <h3>{section.label}</h3>
+                <p className="body-copy">{section.description}</p>
+              </div>
+              {section.key === "installable" ? (
                 <button
-                  className="plugin-card-body"
-                  onClick={() => {
-                    setSelectedPluginName(plugin.metadata.name);
-                    setInspectorMode("context");
-                  }}
+                  className="button secondary"
+                  disabled={!installableMissingTools.length || loading}
+                  onClick={() => dispatchCommand("install-all-missing-tools")}
                 >
-                  <div className="plugin-card-head">
-                    <div>
-                      <h4>{plugin.metadata.display_name}</h4>
-                      <p>{plugin.metadata.category}</p>
-                    </div>
-                    <span className={`status-pill ${plugin.available ? "ok" : "danger"}`}>
-                      {plugin.available ? "installed" : "missing"}
-                    </span>
-                  </div>
-                  <p>{plugin.metadata.description || "No description published for this adapter."}</p>
-                  <div className="plugin-card-foot">
-                    <span className="meta-chip">{plugin.metadata.install_strategy || "system"}</span>
-                    <span className="meta-chip">v {pluginVersion(plugin)}</span>
-                  </div>
+                  Install all missing
                 </button>
-                {!plugin.available && plugin.metadata.install_strategy !== "system" ? (
-                  <button
-                    className="button primary button-inline"
-                    disabled={loading}
-                    onClick={() => void installMissingTool(plugin.metadata.name)}
+              ) : null}
+            </div>
+            {section.items.length ? (
+              <div className="plugin-grid">
+                {section.items.map((plugin) => (
+                  <article
+                    key={plugin.metadata.name}
+                    className={`plugin-card ${selectedPlugin?.metadata.name === plugin.metadata.name ? "active" : ""}`}
                   >
-                    Install
-                  </button>
-                ) : null}
-              </article>
-            ))
-          ) : (
-            <div className="empty-inline">No plugins match the current filter.</div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
+                    <button
+                      className="plugin-card-body"
+                      onClick={() => {
+                        setSelectedPluginName(plugin.metadata.name);
+                        setInspectorMode("context");
+                      }}
+                    >
+                      <div className="plugin-card-head">
+                        <div>
+                          <h4>{plugin.metadata.display_name}</h4>
+                          <p>{plugin.metadata.category}</p>
+                        </div>
+                        <span className={`status-pill ${plugin.available ? "ok" : "danger"}`}>
+                          {plugin.available ? "installed" : "missing"}
+                        </span>
+                      </div>
+                      <p>{plugin.metadata.description || "No description published for this adapter."}</p>
+                      <div className="plugin-card-foot">
+                        <span className="meta-chip">{plugin.metadata.install_strategy || "system"}</span>
+                        <span className="meta-chip">v {pluginVersion(plugin)}</span>
+                      </div>
+                    </button>
+                    {!plugin.available && plugin.metadata.install_strategy !== "system" ? (
+                      <button
+                        className="button primary button-inline"
+                        disabled={loading}
+                        onClick={() => void installMissingTool(plugin.metadata.name)}
+                      >
+                        Install
+                      </button>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-inline">No plugins appear in this group for the current filter.</div>
+            )}
+          </section>
+        ))}
+      </div>
+    );
+  };
 
   const renderContextInspector = () => {
     if (activeTab === "findings") {
       return renderFindingInspector({
         finding: selectedFinding,
         findingPath: selectedFindingPath,
+        sourcePreview,
         openTarget,
       });
     }
@@ -1756,6 +2539,7 @@ export default function App() {
         plugin: selectedPlugin,
         install: installMissingTool,
         loading,
+        openTarget,
       });
     }
     return renderSessionInspector({
@@ -1969,36 +2753,55 @@ export default function App() {
 
       <section className="toolbar">
         <div className="toolbar-group">
-          <button className="button primary button-inline" disabled={!backendReady || !repositoryPath || loading} onClick={() => void runScan()}>
+          <button
+            className="button primary button-inline"
+            disabled={commandRegistry["start-scan"].disabled}
+            onClick={() => dispatchCommand("start-scan")}
+          >
             Start Scan
           </button>
-          <button className="button secondary button-inline" disabled={loading} onClick={() => void chooseRepository()}>
+          <button
+            className="button secondary button-inline"
+            disabled={commandRegistry["open-repository"].disabled}
+            onClick={() => dispatchCommand("open-repository")}
+          >
             Open Repo
           </button>
-          <button className="button secondary button-inline" disabled={!backendReady || loading} onClick={() => void refreshState()}>
+          <button
+            className="button secondary button-inline"
+            disabled={commandRegistry["refresh-runtime"].disabled}
+            onClick={() => dispatchCommand("refresh-runtime")}
+          >
             Refresh
           </button>
-          <button className="button secondary button-inline" disabled={offlineMode || loading} onClick={() => void syncAdvisories()}>
+          <button
+            className="button secondary button-inline"
+            disabled={commandRegistry["sync-advisories"].disabled}
+            onClick={() => dispatchCommand("sync-advisories")}
+          >
             Update Feeds
+          </button>
+          <button className="button ghost button-inline" onClick={() => dispatchCommand("open-command-palette")}>
+            Commands
           </button>
         </div>
         <div className="toolbar-group">
-          <button className={`toolbar-toggle ${showTreeDock ? "active" : ""}`} onClick={() => setShowTreeDock((value) => !value)}>
+          <button className={`toolbar-toggle ${showTreeDock ? "active" : ""}`} onClick={() => dispatchCommand("toggle-tree-dock")}>
             Tree
           </button>
-          <button className={`toolbar-toggle ${showInspectorDock ? "active" : ""}`} onClick={() => setShowInspectorDock((value) => !value)}>
+          <button className={`toolbar-toggle ${showInspectorDock ? "active" : ""}`} onClick={() => dispatchCommand("toggle-inspector-dock")}>
             Inspector
           </button>
-          <button className={`toolbar-toggle ${showConsoleDock ? "active" : ""}`} onClick={() => setShowConsoleDock((value) => !value)}>
+          <button className={`toolbar-toggle ${showConsoleDock ? "active" : ""}`} onClick={() => dispatchCommand("toggle-console-dock")}>
             Console
           </button>
-          <button className={`toolbar-toggle ${inspectorMode === "runtime" ? "active" : ""}`} onClick={() => setInspectorMode((value) => (value === "runtime" ? "context" : "runtime"))}>
+          <button className={`toolbar-toggle ${inspectorMode === "runtime" ? "active" : ""}`} onClick={() => dispatchCommand("toggle-inspector-mode")}>
             {inspectorMode === "runtime" ? "Runtime Inspector" : "Context Inspector"}
           </button>
         </div>
       </section>
 
-      <main className={`workbench ${showTreeDock ? "with-tree" : ""} ${showInspectorDock ? "with-inspector" : ""}`}>
+      <main className="workbench" style={workbenchStyle}>
         {showTreeDock ? (
           <aside className="dock dock-left">
             <section className="dock-section">
@@ -2029,6 +2832,29 @@ export default function App() {
                   <span>Runtime</span>
                   <strong>Plugin Manager</strong>
                 </button>
+              </div>
+            </section>
+
+            <section className="dock-section">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Active Scan</span>
+                  <h3>{scan ? compactPath(scan.repository_path) : "No active scan"}</h3>
+                </div>
+              </div>
+              <div className="summary-grid single-column">
+                <article className="summary-card">
+                  <span className="detail-label">Status</span>
+                  <strong>{scan?.status || "idle"}</strong>
+                  <p>{scan ? `${scan.completed_tools}/${scan.total_tools} tools complete.` : "No scan has been loaded yet."}</p>
+                </article>
+                <article className="summary-card">
+                  <span className="detail-label">Quick counts</span>
+                  <strong>{scan?.summary.total_findings || 0}</strong>
+                  <p>
+                    {dependencyNodes.length} dependencies, {scan?.artifacts.length || 0} artifacts, {missingTools.length} missing tools.
+                  </p>
+                </article>
               </div>
             </section>
 
@@ -2087,6 +2913,7 @@ export default function App() {
             </section>
           </aside>
         ) : null}
+        {showTreeDock ? <div className="pane-resizer vertical" onPointerDown={startResize("left")} /> : null}
 
         <section className="workspace-panel">
           <div className="workspace-header">
@@ -2127,6 +2954,7 @@ export default function App() {
           </div>
         </section>
 
+        {showInspectorDock ? <div className="pane-resizer vertical" onPointerDown={startResize("right")} /> : null}
         {showInspectorDock ? (
           <aside className="dock dock-right">
             <div className="inspector-header">
@@ -2151,7 +2979,8 @@ export default function App() {
         ) : null}
       </main>
 
-      {showConsoleDock ? renderBottomConsole() : null}
+      {showConsoleDock ? <div className="pane-resizer horizontal" onPointerDown={startResize("console")} /> : null}
+      {showConsoleDock ? <div style={{ height: `${consoleHeight}px`, minHeight: `${minConsoleHeight}px` }}>{renderBottomConsole()}</div> : null}
 
       <footer className="status-bar">
         <span>Backend: {backendReady ? "ready" : "starting"}</span>
@@ -2160,6 +2989,49 @@ export default function App() {
         <span>Findings: {scan ? scan.summary.total_findings : 0}</span>
         <span>Missing tools: {missingTools.length}</span>
       </footer>
+
+      {commandPaletteOpen ? (
+        <div className="command-palette-overlay">
+          <div className="command-palette" ref={commandPaletteRef}>
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Command Palette</span>
+                <h3>Search desktop actions</h3>
+              </div>
+              <button className="button ghost button-inline" onClick={() => setCommandPaletteOpen(false)}>
+                Close
+              </button>
+            </div>
+            <input
+              className="search-input"
+              autoFocus
+              value={commandQuery}
+              onChange={(event) => setCommandQuery(event.target.value)}
+              placeholder="Type a command name, hint, or shortcut"
+            />
+            <div className="command-palette-results">
+              {paletteCommands.length ? (
+                paletteCommands.map((command, index) => (
+                  <button
+                    key={command.id}
+                    className={`command-row ${index === 0 ? "active" : ""}`}
+                    disabled={command.disabled}
+                    onClick={() => dispatchCommand(command.id)}
+                  >
+                    <div>
+                      <strong>{command.label}</strong>
+                      <p>{command.hint}</p>
+                    </div>
+                    {command.shortcut ? <span className="meta-chip">{command.shortcut}</span> : null}
+                  </button>
+                ))
+              ) : (
+                <div className="empty-inline">No commands match the current search.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

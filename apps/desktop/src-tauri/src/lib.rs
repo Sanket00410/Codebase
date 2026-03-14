@@ -8,7 +8,8 @@ use std::sync::Mutex;
 use std::os::windows::process::CommandExt;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const BACKEND_HOST: &str = "127.0.0.1";
 const BACKEND_PORT: &str = "8686";
@@ -22,6 +23,20 @@ struct BackendState {
 struct BackendStatus {
     running: bool,
     port: u16,
+}
+
+#[derive(Serialize, Clone)]
+struct DesktopCommandEvent {
+    id: String,
+}
+
+#[derive(Serialize)]
+struct SourceWindowPayload {
+    path: String,
+    start_line: usize,
+    end_line: usize,
+    snippet: String,
+    error: Option<String>,
 }
 
 #[tauri::command]
@@ -144,6 +159,97 @@ fn open_path(path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn read_source_window(
+    path: String,
+    line: Option<usize>,
+    before: Option<usize>,
+    after: Option<usize>,
+) -> SourceWindowPayload {
+    let path_buf = PathBuf::from(&path);
+    let resolved_path = path_buf
+        .canonicalize()
+        .unwrap_or(path_buf.clone())
+        .to_string_lossy()
+        .to_string();
+
+    let bytes = match fs::read(&path_buf) {
+        Ok(contents) => contents,
+        Err(error) => {
+            return SourceWindowPayload {
+                path: resolved_path,
+                start_line: 0,
+                end_line: 0,
+                snippet: String::new(),
+                error: Some(format!("Unable to read source file: {error}")),
+            };
+        }
+    };
+
+    let content = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.is_empty() {
+        return SourceWindowPayload {
+            path: resolved_path,
+            start_line: 0,
+            end_line: 0,
+            snippet: String::new(),
+            error: Some("Source file is empty.".to_string()),
+        };
+    }
+
+    let requested_line = line.unwrap_or(1).max(1).min(lines.len());
+    let before_window = before.unwrap_or(8).min(80);
+    let after_window = after.unwrap_or(12).min(120);
+    let start_line = requested_line.saturating_sub(before_window).max(1);
+    let end_line = (requested_line + after_window).min(lines.len());
+    let snippet = lines[(start_line - 1)..end_line]
+        .iter()
+        .enumerate()
+        .map(|(index, source_line)| format!("{:>5} | {}", start_line + index, source_line))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    SourceWindowPayload {
+        path: resolved_path,
+        start_line,
+        end_line,
+        snippet,
+        error: None,
+    }
+}
+
+fn configure_native_menu(app: &AppHandle) -> Result<(), String> {
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .text("menu.open-repository", "Open Repository...")
+        .text("menu.file.open-selected-artifact", "Open Active Report")
+        .build()
+        .map_err(|error| error.to_string())?;
+    let scan_menu = SubmenuBuilder::new(app, "Scan")
+        .text("menu.start-scan", "Start Scan")
+        .text("menu.refresh-runtime", "Refresh Runtime State")
+        .build()
+        .map_err(|error| error.to_string())?;
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .text("menu.toggle-tree-dock", "Toggle Session Tree")
+        .text("menu.toggle-inspector-dock", "Toggle Inspector")
+        .text("menu.toggle-console-dock", "Toggle Event Console")
+        .build()
+        .map_err(|error| error.to_string())?;
+    let reports_menu = SubmenuBuilder::new(app, "Reports")
+        .text("menu.switch-reports", "Open Report Explorer")
+        .text("menu.reports.open-selected-artifact", "Open Active Report")
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let menu = MenuBuilder::new(app)
+        .items(&[&file_menu, &scan_menu, &view_menu, &reports_menu])
+        .build()
+        .map_err(|error| error.to_string())?;
+    app.set_menu(menu).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn backend_command(app: &AppHandle) -> Result<(String, Vec<String>, PathBuf), String> {
     if let Ok(explicit_backend) = std::env::var("SCANNER_PLATFORM_BACKEND") {
         let path = PathBuf::from(explicit_backend);
@@ -258,7 +364,30 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(BackendState::default())
-        .invoke_handler(tauri::generate_handler![start_backend, stop_backend, backend_status, open_path])
+        .setup(|app| {
+            if let Err(error) = configure_native_menu(&app.handle()) {
+                eprintln!("failed to configure native menu: {error}");
+            }
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref();
+            if id.starts_with("menu.") {
+                let _ = app.emit(
+                    "desktop-command",
+                    DesktopCommandEvent {
+                        id: id.to_string(),
+                    },
+                );
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            start_backend,
+            stop_backend,
+            backend_status,
+            open_path,
+            read_source_window
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

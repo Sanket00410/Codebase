@@ -54,10 +54,12 @@ button {
 
 .desktop-shell {
   min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-rows: auto auto 1fr auto auto;
   gap: 14px;
   padding: 14px;
+  overflow: hidden;
 }
 
 .menu-bar,
@@ -288,6 +290,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  overflow: hidden;
 }
 
 .workbench.with-tree.with-inspector {
@@ -312,6 +315,7 @@ button {
   display: grid;
   align-content: start;
   gap: 14px;
+  overflow: auto;
 }
 
 .dock-section,
@@ -821,11 +825,15 @@ button {
   display: grid;
   gap: 12px;
   padding: 14px 16px;
+  height: 100%;
+  min-height: 0;
 }
 
 .console-list,
 .timeline-list {
-  max-height: 240px;
+  max-height: none;
+  min-height: 0;
+  height: 100%;
   overflow: auto;
 }
 
@@ -918,6 +926,93 @@ button {
   color: var(--muted);
 }
 
+.pane-resizer {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  position: relative;
+}
+
+.pane-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transition: background 140ms ease;
+}
+
+.pane-resizer:hover::after {
+  background: rgba(103, 160, 255, 0.28);
+}
+
+.pane-resizer.vertical {
+  width: 8px;
+  cursor: col-resize;
+}
+
+.pane-resizer.horizontal {
+  height: 8px;
+  cursor: row-resize;
+}
+
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: 100px;
+  background: rgba(5, 10, 18, 0.62);
+  backdrop-filter: blur(8px);
+  z-index: 40;
+}
+
+.command-palette {
+  width: min(720px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line-strong);
+  background: rgba(12, 19, 31, 0.98);
+  box-shadow: var(--shadow-lg);
+}
+
+.command-palette-results {
+  max-height: 420px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.command-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.command-row.active,
+.command-row:hover:not(:disabled) {
+  border-color: rgba(103, 160, 255, 0.42);
+  background: rgba(103, 160, 255, 0.1);
+}
+
+.command-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.command-row strong,
+.command-row p {
+  margin: 0;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -934,10 +1029,8 @@ button {
 }
 
 @media (max-width: 1220px) {
-  .workbench.with-tree.with-inspector,
-  .workbench.with-tree:not(.with-inspector),
-  .workbench.with-inspector:not(.with-tree) {
-    grid-template-columns: 1fr;
+  .workbench {
+    grid-template-columns: 1fr !important;
   }
 
   .dual-grid,
@@ -956,6 +1049,10 @@ button {
   .workspace-header-metrics {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .pane-resizer {
+    display: none;
   }
 }
 
