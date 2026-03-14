@@ -643,6 +643,11 @@ function renderReportsInspector({
         <button className="button secondary button-inline" onClick={() => void openTarget(artifact.path)}>
           Open artifact
         </button>
+        {pathDirectory(artifact.path) ? (
+          <button className="button ghost button-inline" onClick={() => void openTarget(pathDirectory(artifact.path)!)}>
+            Open containing folder
+          </button>
+        ) : null}
       </section>
     </div>
   );
@@ -777,6 +782,18 @@ function isPreviewableArtifact(artifact: Artifact | null): boolean {
   );
 }
 
+function pathDirectory(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.replace(/[\\/]+$/, "");
+  const slashIndex = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  if (slashIndex <= 0) {
+    return null;
+  }
+  return normalized.slice(0, slashIndex);
+}
+
 function resolveLocationPath(scan: ScanResult | null, finding: Finding | null): string | null {
   const locationPath = finding?.location?.path;
   if (!scan || !locationPath) {
@@ -839,6 +856,7 @@ export default function App() {
   const [selectedReportProfileIds, setSelectedReportProfileIds] = useState<string[]>([...defaultReportProfiles]);
   const [includePlusReportVariants, setIncludePlusReportVariants] = useState(false);
   const [openReportAfterGenerate, setOpenReportAfterGenerate] = useState(true);
+  const [recentGeneratedArtifactPaths, setRecentGeneratedArtifactPaths] = useState<string[]>([]);
   const [offlineMode, setOfflineMode] = useState(false);
   const [refreshAdvisoriesOnScan, setRefreshAdvisoriesOnScan] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
@@ -1045,6 +1063,7 @@ export default function App() {
   const loadScan = (nextScan: ScanResult) => {
     setScan(nextScan);
     setRepositoryPath(nextScan.repository_path);
+    setRecentGeneratedArtifactPaths([]);
     setMaintenanceMessage(`Loaded persisted scan ${nextScan.scan_id}.`);
     setError(null);
   };
@@ -1063,6 +1082,7 @@ export default function App() {
         updateAdvisories: refreshAdvisoriesOnScan,
         includePlusReportVariants,
       });
+      setRecentGeneratedArtifactPaths([]);
       setScan(queued);
       setActiveTab("dashboard");
       setInspectorMode("context");
@@ -1161,6 +1181,7 @@ export default function App() {
         profileIds: selectedReportProfileIds,
         includePlusVariants: includePlusReportVariants,
       });
+      setRecentGeneratedArtifactPaths(generatedArtifacts.map((artifact) => artifact.path));
       setMaintenanceMessage(
         `Generated ${selectedReportProfileIds.length} report profile${selectedReportProfileIds.length === 1 ? "" : "s"}${includePlusReportVariants ? " with plus variants." : "."}`,
       );
@@ -1350,6 +1371,17 @@ export default function App() {
     null;
   const selectedExecution =
     scan?.tools.find((tool) => tool.tool === selectedExecutionTool) || scan?.tools[0] || null;
+  const recentlyGeneratedArtifacts = useMemo(
+    () =>
+      recentGeneratedArtifactPaths
+        .map((path) => scan?.artifacts.find((artifact) => artifact.path === path) || null)
+        .filter((artifact): artifact is Artifact => Boolean(artifact)),
+    [recentGeneratedArtifactPaths, scan],
+  );
+  const recentGeneratedReportDirectory = useMemo(
+    () => pathDirectory(recentGeneratedArtifactPaths[0] || selectedArtifact?.path || null),
+    [recentGeneratedArtifactPaths, selectedArtifact?.path],
+  );
   const selectedDependencyFindings = useMemo(() => {
     if (!scan || !selectedDependency) {
       return [];
@@ -2446,6 +2478,53 @@ export default function App() {
 
   const renderReports = () => (
     <div className="workspace-scroll">
+      {recentlyGeneratedArtifacts.length ? (
+        <section className="panel work-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Generated Reports</span>
+              <h3>Your reports are ready</h3>
+              <p className="body-copy">
+                The latest generated artifacts are listed below. You can open the selected report directly or open the
+                report folder to see every generated file.
+              </p>
+            </div>
+            <div className="toolbar-group">
+              {recentGeneratedReportDirectory ? (
+                <button className="button secondary button-inline" onClick={() => void openTarget(recentGeneratedReportDirectory)}>
+                  Open report folder
+                </button>
+              ) : null}
+              {recentlyGeneratedArtifacts[0] ? (
+                <button className="button primary button-inline" onClick={() => void openTarget(recentlyGeneratedArtifacts[0].path)}>
+                  Open latest report
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {recentGeneratedReportDirectory ? (
+            <div className="path-banner small">{recentGeneratedReportDirectory}</div>
+          ) : null}
+          <div className="artifact-grid">
+            {recentlyGeneratedArtifacts.map((artifact) => (
+              <button
+                key={artifact.path}
+                className={`tile-card ${selectedArtifact?.path === artifact.path ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedArtifactPath(artifact.path);
+                  setReportInspectorMode("artifact");
+                  setInspectorMode("context");
+                }}
+              >
+                <span className="detail-label">{artifact.profile_id || artifact.kind}</span>
+                <strong>{artifactDisplayLabel(artifact)}</strong>
+                <p>{artifact.description || artifact.path}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="panel work-card">
         <div className="section-heading">
           <div>
@@ -2542,10 +2621,17 @@ export default function App() {
                 <article className="summary-card">
                   <span className="detail-label">Action</span>
                   <strong>Open artifact</strong>
-                  <p>Launch the selected report or raw payload in the desktop shell.</p>
-                  <button className="button secondary button-inline" onClick={() => dispatchCommand("open-selected-artifact")}>
-                    Open selected artifact
-                  </button>
+                  <p>Launch the selected report or open its folder in the desktop shell.</p>
+                  <div className="action-column">
+                    <button className="button secondary button-inline" onClick={() => dispatchCommand("open-selected-artifact")}>
+                      Open selected artifact
+                    </button>
+                    {pathDirectory(selectedArtifact.path) ? (
+                      <button className="button ghost button-inline" onClick={() => void openTarget(pathDirectory(selectedArtifact.path)!)}>
+                        Open containing folder
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               </div>
               <article className="summary-card report-preview-card">

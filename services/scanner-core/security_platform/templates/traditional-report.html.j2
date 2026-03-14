@@ -4,137 +4,177 @@
     <meta charset="utf-8" />
     <title>{{ report.profile.label|title }} - {{ report.scan.scan_id }}</title>
     <style>
-      body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f4f6f8; color: #1d2733; }
-      main { max-width: 1160px; margin: 0 auto; padding: 28px; }
-      .panel { background: white; border: 1px solid #d8dee6; margin-bottom: 18px; box-shadow: 0 8px 20px rgba(29, 39, 51, 0.08); }
-      .panel > div { padding: 18px 20px; }
-      .header { background: #0f1722; color: white; }
-      h1, h2, h3, p { margin-top: 0; }
-      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-      .metric { border: 1px solid #d8dee6; padding: 12px; background: #f8fafc; }
-      .metric strong { display: block; font-size: 26px; margin-top: 6px; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { padding: 10px 8px; border-top: 1px solid #d8dee6; vertical-align: top; text-align: left; }
-      th { background: #eef2f6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-      .severity { font-weight: 700; text-transform: uppercase; }
-      .severity-critical, .severity-high { color: #a61b1b; }
-      .severity-medium { color: #8c5a00; }
-      .severity-low, .severity-info { color: #1f6a49; }
-      .code { white-space: pre-wrap; background: #111827; color: #e5edf7; padding: 12px; border-radius: 10px; overflow: auto; font-family: Consolas, monospace; font-size: 12px; }
-      .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #e9eef6; margin-right: 6px; font-size: 12px; }
+      :root {
+        --bg: #f2f5f9;
+        --panel: #ffffff;
+        --line: #d3dce7;
+        --ink: #172433;
+        --muted: #5f6e82;
+        --navy: #16324b;
+        --gold: #d9a441;
+        --critical: #9f1d1d;
+        --high: #b45309;
+        --medium: #9a7600;
+        --low: #25603d;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+      main { max-width: 1240px; margin: 0 auto; padding: 28px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: 0 14px 34px rgba(23, 36, 51, 0.08); margin-bottom: 18px; }
+      .hero-head { background: linear-gradient(135deg, var(--navy), #274f72); color: white; padding: 24px 26px; display: grid; grid-template-columns: 2fr 220px; gap: 20px; }
+      .hero-body, .panel-body { padding: 20px 24px; }
+      .eyebrow { display: inline-block; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: #adc3d8; }
+      .hero h1, .panel h2, .panel h3, p { margin-top: 0; }
+      .score-ring { width: 148px; height: 148px; border-radius: 50%; border: 10px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 44px; font-weight: 800; }
+      .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+      .metric { border: 1px solid var(--line); border-radius: 14px; background: #f8fbff; padding: 14px; }
+      .metric span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+      .metric strong { display: block; margin-top: 6px; font-size: 28px; }
+      .severity-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+      .severity-card { border-radius: 14px; padding: 14px; color: white; }
+      .severity-card strong { display: block; font-size: 28px; margin-top: 8px; }
+      .severity-card.critical { background: linear-gradient(135deg, #8f1919, #c23a3a); }
+      .severity-card.high { background: linear-gradient(135deg, #a34905, #d97822); }
+      .severity-card.medium { background: linear-gradient(135deg, #8f7300, #c9a11f); }
+      .severity-card.low, .severity-card.info { background: linear-gradient(135deg, #21563f, #3b8b62); }
+      .risk-list { display: grid; gap: 12px; }
+      .risk-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 220px; gap: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+      .risk-row:first-child { border-top: 0; padding-top: 0; }
+      .severity-pill { display: inline-flex; justify-content: center; align-items: center; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: #eef3f8; }
+      .severity-pill.critical { color: var(--critical); }
+      .severity-pill.high { color: var(--high); }
+      .severity-pill.medium { color: var(--medium); }
+      .severity-pill.low, .severity-pill.info { color: var(--low); }
+      .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+      .meta-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fbfcfe; }
+      .meta-card span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+      .meta-card strong { display: block; margin-top: 6px; font-size: 14px; }
+      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+      .chip { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: #edf3f8; color: #264561; font-size: 12px; }
+      .code { margin-top: 12px; padding: 14px; border-radius: 12px; background: #101a28; color: #e4edf8; white-space: pre-wrap; font: 12px/1.55 "IBM Plex Mono", Consolas, monospace; overflow: auto; }
+      .summary-text { color: var(--muted); }
     </style>
   </head>
   <body>
     <main>
-      <section class="panel">
-        <div class="header">
-          <h1>{{ report.profile.label|title }}</h1>
-          <p>{{ report.executive_summary.headline }}</p>
-          <p>Repository: {{ report.scan.repository_path }}</p>
-        </div>
-        <div class="grid">
-          <div class="metric"><span>Security score</span><strong>{{ report.summary.security_score }}</strong></div>
-          <div class="metric"><span>Total findings</span><strong>{{ report.summary.total_findings }}</strong></div>
-          <div class="metric"><span>Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
-          <div class="metric"><span>Tools run</span><strong>{{ report.summary.tools_run|length }}</strong></div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div>
-          <h2>Severity Distribution</h2>
-          <div class="grid">
-            {% for severity, count in report.summary.severity_distribution.items() %}
-              <div class="metric"><span>{{ severity }}</span><strong>{{ count }}</strong></div>
-            {% endfor %}
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div>
-          <h2>Findings Ledger</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Severity</th>
-                <th>Finding</th>
-                <th>Tool</th>
-                <th>File/Line Evidence</th>
-                <th>Dependency/Package Evidence</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for finding in report.findings %}
-                <tr>
-                  <td class="severity severity-{{ finding.severity }}">{{ finding.severity }}</td>
-                  <td>
-                    <strong>{{ finding.title }}</strong>
-                    <div>{{ finding.description }}</div>
-                    {% if finding.cve_ids %}<div>CVE/CWE/CVSS: {{ finding.cve_ids|join(", ") }}</div>{% endif %}
-                    {% if finding.cwe_ids %}<div>{{ finding.cwe_ids|join(", ") }}</div>{% endif %}
-                  </td>
-                  <td>{{ finding.source_tool }}</td>
-                  <td>
-                    {% if finding.location %}
-                      {{ finding.location.path }}{% if finding.location.line %}:{{ finding.location.line }}{% endif %}
-                    {% else %}
-                      n/a
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if finding.package %}
-                      {{ finding.package.name }}@{{ finding.package.version or "unknown" }}
-                    {% else %}
-                      n/a
-                    {% endif %}
-                  </td>
-                </tr>
-                {% if report.profile.includes_rich_evidence and finding.rich_evidence %}
-                  <tr>
-                    <td colspan="5">
-                      {% if finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
-                        <h3>Source snippets</h3>
-                        <div class="code">{{ finding.rich_evidence.source_snippets.snippet }}</div>
-                      {% endif %}
-                      {% if finding.rich_evidence.remediation %}
-                        <h3>Remediation</h3>
-                        <p>{{ finding.rich_evidence.remediation }}</p>
-                      {% endif %}
-                      {% if finding.rich_evidence.ai_triage %}
-                        <h3>AI triage</h3>
-                        <p>{{ finding.rich_evidence.ai_triage }}</p>
-                      {% endif %}
-                      {% if finding.rich_evidence.raw_scanner_output %}
-                        <h3>Raw scanner output</h3>
-                        <div class="code">{{ finding.rich_evidence.raw_scanner_output.stdout_excerpt or finding.rich_evidence.raw_scanner_output.stderr_excerpt or "" }}</div>
-                      {% endif %}
-                    </td>
-                  </tr>
-                {% endif %}
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {% if report.profile.includes_rich_evidence and report.tool_outputs %}
-        <section class="panel">
+      <section class="hero">
+        <div class="hero-head">
           <div>
-            <h2>Raw Scanner Output</h2>
-            {% for tool in report.tool_outputs %}
-              <h3>{{ tool.tool }}</h3>
-              <p>
-                <span class="pill">Exit {{ tool.exit_code }}</span>
-                <span class="pill">{{ tool.duration_seconds }}s</span>
-              </p>
-              {% if tool.command %}<p><strong>Command:</strong> {{ tool.command|join(" ") }}</p>{% endif %}
-              {% if tool.stdout %}<div class="code">{{ tool.stdout }}</div>{% endif %}
-              {% if tool.stderr %}<div class="code">{{ tool.stderr }}</div>{% endif %}
+            <span class="eyebrow">Traditional Report</span>
+            <h1>{{ report.executive_summary.headline }}</h1>
+            <p>{{ report.scan.repository_path }}</p>
+            <p>Scan ID {{ report.scan.scan_id }}{% if report.scan.completed_at %} · Completed {{ report.scan.completed_at }}{% endif %}</p>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;">
+            <div class="score-ring">{{ report.summary.security_score }}</div>
+          </div>
+        </div>
+        <div class="hero-body">
+          <div class="metrics">
+            <div class="metric"><span>Total findings</span><strong>{{ report.summary.total_findings }}</strong></div>
+            <div class="metric"><span>Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
+            <div class="metric"><span>Tools run</span><strong>{{ report.summary.tools_run|length }}</strong></div>
+            <div class="metric"><span>Languages</span><strong>{{ report.summary.languages|length }}</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-body">
+          <h2>Severity Distribution</h2>
+          <div class="severity-grid">
+            {% for severity, count in report.summary.severity_distribution.items() %}
+              <div class="severity-card {{ severity }}">
+                <span>{{ severity|upper }}</span>
+                <strong>{{ count }}</strong>
+              </div>
             {% endfor %}
           </div>
-        </section>
-      {% endif %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-body">
+          <h2>Top Risks</h2>
+          <div class="risk-list">
+            {% for risk in report.executive_summary.top_risks %}
+              <div class="risk-row">
+                <div><span class="severity-pill {{ risk.severity }}">{{ risk.severity }}</span></div>
+                <div>
+                  <h3>{{ risk.title }}</h3>
+                  <p class="summary-text">{{ risk.tool }}{% if risk.location and risk.location != "n/a" %} · {{ risk.location }}{% endif %}</p>
+                </div>
+                <div class="meta-card">
+                  <span>Dependency/Package Evidence</span>
+                  <strong>{{ risk.package or "n/a" }}</strong>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-body">
+          <h2>Findings Ledger</h2>
+          <div class="risk-list">
+            {% for finding in report.findings %}
+              <article class="risk-row">
+                <div><span class="severity-pill {{ finding.severity }}">{{ finding.severity }}</span></div>
+                <div>
+                  <h3>{{ finding.title }}</h3>
+                  <p>{{ finding.description }}</p>
+                  <div class="chip-row">
+                    <span class="chip">{{ finding.source_tool }}</span>
+                    <span class="chip">{{ finding.category }}</span>
+                    <span class="chip">File/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</span>
+                    {% if finding.package %}<span class="chip">Dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</span>{% endif %}
+                    <span class="chip">CVE: {{ finding.cve_ids|join(", ") if finding.cve_ids else "none" }}</span>
+                    <span class="chip">CWE: {{ finding.cwe_ids|join(", ") if finding.cwe_ids else "none" }}</span>
+                    <span class="chip">CVSS: {{ finding.cvss_score if finding.cvss_score is not none else "n/a" }}</span>
+                  </div>
+                  {% if finding.remediation %}
+                    <div class="meta-card" style="margin-top:12px;">
+                      <span>Remediation</span>
+                      <strong>{{ finding.remediation }}</strong>
+                    </div>
+                  {% endif %}
+                  {% if report.profile.includes_rich_evidence and finding.ai_triage %}
+                    <div class="meta-card" style="margin-top:12px;">
+                      <span>AI Triage</span>
+                      <strong>{{ finding.ai_triage }}</strong>
+                    </div>
+                  {% endif %}
+                  {% if report.profile.includes_rich_evidence and finding.rich_evidence and finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
+                    <div class="code">{{ finding.rich_evidence.source_snippets.snippet }}</div>
+                  {% endif %}
+                  {% if report.profile.includes_rich_evidence and finding.rich_evidence and finding.rich_evidence.raw_scanner_output %}
+                    <div class="code">{{ finding.rich_evidence.raw_scanner_output.stdout_excerpt or finding.rich_evidence.raw_scanner_output.stderr_excerpt or "" }}</div>
+                  {% endif %}
+                </div>
+                <div class="meta-grid">
+                  <div class="meta-card">
+                    <span>Rule</span>
+                    <strong>{{ finding.rule_id or finding.fingerprint }}</strong>
+                  </div>
+                  <div class="meta-card">
+                    <span>Confidence</span>
+                    <strong>{{ (finding.confidence * 100)|round|int }}%</strong>
+                  </div>
+                  <div class="meta-card">
+                    <span>Media path</span>
+                    <strong>{{ finding.location.path if finding.location else "n/a" }}</strong>
+                  </div>
+                  <div class="meta-card">
+                    <span>References</span>
+                    <strong>{{ finding.references|length }}</strong>
+                  </div>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
     </main>
   </body>
 </html>

@@ -9,9 +9,10 @@ from xml.dom import minidom
 from xml.etree import ElementTree as ET
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Paragraph, Preformatted, SimpleDocTemplate, Spacer
+from reportlab.platypus import Paragraph, Preformatted, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from security_platform.core.config import settings
 from security_platform.core.models import FindingLocation, NormalizedFinding, ReportArtifact, ReportProfileDefinition, ScanResult
@@ -368,6 +369,12 @@ def _serialize_finding(scan_result: ScanResult, finding: NormalizedFinding, incl
         record["cve_ids"] = finding.cve_ids
     if finding.cwe_ids:
         record["cwe_ids"] = finding.cwe_ids
+    if finding.cvss_score is not None:
+        record["cvss_score"] = finding.cvss_score
+    if finding.remediation:
+        record["remediation"] = finding.remediation
+    if finding.ai_triage:
+        record["ai_triage"] = finding.ai_triage
 
     if include_rich_evidence:
         record["rich_evidence"] = {
@@ -682,63 +689,173 @@ def _to_markdown(document: dict[str, Any], profile: ReportProfileSpec) -> str:
 
 def _to_pdf(document: dict[str, Any], profile: ReportProfileSpec, path: Path) -> None:
     styles = getSampleStyleSheet()
-    code_style = ParagraphStyle("CodeBlock", parent=styles["Code"], fontName="Courier", fontSize=8, leading=10)
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Title"],
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#173552"),
+        fontSize=24,
+        leading=28,
+    )
+    eyebrow_style = ParagraphStyle(
+        "Eyebrow",
+        parent=styles["BodyText"],
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#6c7a92"),
+        fontSize=9,
+        leading=11,
+    )
+    section_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        textColor=colors.HexColor("#173552"),
+        fontSize=16,
+        leading=20,
+        spaceAfter=6,
+    )
+    card_label_style = ParagraphStyle(
+        "CardLabel",
+        parent=styles["BodyText"],
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#6c7a92"),
+        fontSize=8,
+        leading=10,
+    )
+    body_style = ParagraphStyle(
+        "ReportBody",
+        parent=styles["BodyText"],
+        textColor=colors.HexColor("#1b2638"),
+        fontSize=9,
+        leading=12,
+    )
+    code_style = ParagraphStyle("CodeBlock", parent=styles["Code"], fontName="Courier", fontSize=7, leading=9)
+
+    summary_table = Table(
+        [
+            [
+                _summary_card("Security score", str(document["summary"]["security_score"]), title_style, card_label_style, body_style),
+                _summary_card("Total findings", str(document["summary"]["total_findings"]), title_style, card_label_style, body_style),
+            ],
+            [
+                _summary_card(
+                    "Critical + high",
+                    str(document["executive_summary"]["critical_and_high"]),
+                    title_style,
+                    card_label_style,
+                    body_style,
+                ),
+                _summary_card("Tools run", str(len(document["summary"]["tools_run"])), title_style, card_label_style, body_style),
+            ],
+        ],
+        colWidths=[250, 250],
+        hAlign="LEFT",
+    )
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f9fc")),
+                ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#d6e0eb")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.75, colors.HexColor("#d6e0eb")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+            ]
+        )
+    )
+
     story = [
-        Paragraph(profile.label.title(), styles["Title"]),
+        Paragraph(profile.label.title(), title_style),
+        Paragraph("Code Base Scanner reporting system", eyebrow_style),
         Spacer(1, 12),
         Paragraph(document["executive_summary"]["headline"], styles["Heading3"]),
         Spacer(1, 8),
-        Paragraph(f"Repository: {document['scan']['repository_path']}", styles["BodyText"]),
-        Paragraph(f"Scan ID: {document['scan']['scan_id']}", styles["BodyText"]),
-        Paragraph(f"Security score: {document['summary']['security_score']}", styles["BodyText"]),
-        Paragraph(f"Total findings: {document['summary']['total_findings']}", styles["BodyText"]),
+        Paragraph(f"Repository: {document['scan']['repository_path']}", body_style),
+        Paragraph(f"Scan ID: {document['scan']['scan_id']}", body_style),
+        Paragraph(f"Completed: {document['scan']['completed_at'] or 'n/a'}", body_style),
         Spacer(1, 12),
-        Paragraph("Severity Distribution", styles["Heading2"]),
+        summary_table,
+        Spacer(1, 16),
+        Paragraph("Severity Distribution", section_style),
         Spacer(1, 6),
     ]
 
+    severity_rows = [["Severity", "Count"]]
     for severity, count in document["summary"]["severity_distribution"].items():
-        story.append(Paragraph(f"{severity.title()}: {count}", styles["BodyText"]))
+        severity_rows.append([severity.title(), str(count)])
+    severity_table = Table(severity_rows, colWidths=[220, 120], hAlign="LEFT")
+    severity_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#173552")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f8fbff")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#c9d7e5")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d6e0eb")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    story.append(severity_table)
     story.append(Spacer(1, 10))
-    story.append(Paragraph("Findings", styles["Heading2"]))
+    story.append(Paragraph("Findings", section_style))
     story.append(Spacer(1, 6))
 
     for finding in document["findings"][:150]:
-        story.append(Paragraph(f"[{finding['severity'].upper()}] {finding['title']}", styles["Heading3"]))
-        story.append(Paragraph(finding["description"], styles["BodyText"]))
-        story.append(Paragraph(f"Tool: {finding['source_tool']}", styles["BodyText"]))
-        story.append(Paragraph(f"File/line evidence: {_location_label(finding.get('location'))}", styles["BodyText"]))
+        severity_color = _pdf_severity_color(finding["severity"])
+        story.append(
+            Paragraph(
+                f'<font color="{severity_color}">[{finding["severity"].upper()}]</font> {finding["title"]}',
+                styles["Heading3"],
+            )
+        )
+        story.append(Paragraph(finding["description"], body_style))
+        story.append(Paragraph(f"Tool: {finding['source_tool']} | Category: {finding['category']}", body_style))
+        story.append(Paragraph(f"File/line evidence: {_location_label(finding.get('location'))}", body_style))
         if finding.get("package"):
             package = finding["package"]
-            story.append(Paragraph(f"Dependency/package evidence: {package['name']} @ {package.get('version') or 'unknown'}", styles["BodyText"]))
+            story.append(Paragraph(f"Dependency/package evidence: {package['name']} @ {package.get('version') or 'unknown'}", body_style))
+        story.append(
+            Paragraph(
+                f"CVE: {', '.join(finding.get('cve_ids') or ['none'])} | "
+                f"CWE: {', '.join(finding.get('cwe_ids') or ['none'])} | "
+                f"CVSS: {finding.get('cvss_score', 'n/a')}",
+                body_style,
+            )
+        )
+        if finding.get("remediation"):
+            story.append(Paragraph(f"Remediation: {finding['remediation']}", body_style))
         if profile.includes_rich_evidence:
             rich = finding.get("rich_evidence", {})
-            if rich.get("remediation"):
-                story.append(Paragraph(f"Remediation: {rich['remediation']}", styles["BodyText"]))
             if rich.get("source_snippets", {}).get("snippet"):
                 story.append(Spacer(1, 4))
                 story.append(Preformatted(rich["source_snippets"]["snippet"], code_style))
+            if rich.get("ai_triage"):
+                story.append(Paragraph(f"AI triage: {json.dumps(rich['ai_triage'], ensure_ascii=False)}", body_style))
             raw_output = rich.get("raw_scanner_output") or {}
             if raw_output.get("stdout_excerpt"):
                 story.append(Spacer(1, 4))
-                story.append(Paragraph("Raw scanner output", styles["BodyText"]))
+                story.append(Paragraph("Raw scanner output", body_style))
                 story.append(Preformatted(raw_output["stdout_excerpt"], code_style))
         story.append(Spacer(1, 8))
 
     if profile.includes_rich_evidence and document["tool_outputs"]:
-        story.append(Paragraph("Tool Execution Detail", styles["Heading2"]))
+        story.append(Paragraph("Tool Execution Detail", section_style))
         story.append(Spacer(1, 6))
         for tool in document["tool_outputs"]:
             story.append(Paragraph(tool["tool"], styles["Heading3"]))
-            story.append(Paragraph(f"Exit code: {tool['exit_code']} | Duration: {tool['duration_seconds']}s", styles["BodyText"]))
+            story.append(Paragraph(f"Exit code: {tool['exit_code']} | Duration: {tool['duration_seconds']}s", body_style))
             if tool.get("command"):
-                story.append(Paragraph("Command:", styles["BodyText"]))
+                story.append(Paragraph("Command:", body_style))
                 story.append(Preformatted(" ".join(tool["command"]), code_style))
             if tool.get("stdout"):
-                story.append(Paragraph("Stdout excerpt:", styles["BodyText"]))
+                story.append(Paragraph("Stdout excerpt:", body_style))
                 story.append(Preformatted(_clip_text(tool["stdout"], 1800), code_style))
             if tool.get("stderr"):
-                story.append(Paragraph("Stderr excerpt:", styles["BodyText"]))
+                story.append(Paragraph("Stderr excerpt:", body_style))
                 story.append(Preformatted(_clip_text(tool["stderr"], 1200), code_style))
             story.append(Spacer(1, 8))
 
@@ -843,6 +960,31 @@ def _xml_safe_text(value: Any) -> str:
         or 0xE000 <= ord(character) <= 0xFFFD
         or 0x10000 <= ord(character) <= 0x10FFFF
     )
+
+
+def _summary_card(label: str, value: str, title_style: ParagraphStyle, label_style: ParagraphStyle, body_style: ParagraphStyle):
+    metric_value_style = ParagraphStyle(
+        "MetricValue",
+        parent=title_style,
+        fontSize=20,
+        leading=22,
+        textColor=colors.HexColor("#173552"),
+    )
+    return [
+        Paragraph(label, label_style),
+        Paragraph(value, metric_value_style),
+        Paragraph("Repository reporting snapshot", body_style),
+    ]
+
+
+def _pdf_severity_color(severity: str) -> str:
+    return {
+        "critical": "#9f1d1d",
+        "high": "#b45309",
+        "medium": "#b08900",
+        "low": "#25603d",
+        "info": "#25603d",
+    }.get(severity, "#173552")
 
 
 def _to_sarif(scan_result: ScanResult, document: dict[str, Any], profile: ReportProfileSpec) -> dict[str, Any]:

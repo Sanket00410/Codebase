@@ -5,120 +5,167 @@
     <title>{{ report.profile.label|title }} - {{ report.scan.scan_id }}</title>
     <style>
       :root {
-        color-scheme: light;
-        --bg: #f6f3ea;
-        --panel: rgba(255, 252, 246, 0.96);
-        --ink: #152135;
-        --muted: #5f6980;
-        --line: #ddd4c4;
-        --accent: #d8a53b;
-        --accent-2: #173552;
-        --ok: #225d45;
-        --warn: #996d00;
-        --danger: #8b2626;
+        --bg: #f7f0e8;
+        --panel: rgba(255, 252, 246, 0.97);
+        --line: #ddd3c2;
+        --ink: #132033;
+        --muted: #5a6780;
+        --navy: #14304a;
+        --gold: #d9a744;
+        --critical: #9f1d1d;
+        --high: #bc5b04;
+        --medium: #9d7a00;
+        --low: #226449;
       }
-      body { margin: 0; font-family: "IBM Plex Sans", "Segoe UI", sans-serif; background: radial-gradient(circle at top right, #f3d486, transparent 30%), radial-gradient(circle at left, #d5ecff, transparent 20%), var(--bg); color: var(--ink); }
-      main { max-width: 1180px; margin: 0 auto; padding: 28px; }
-      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: 0 16px 38px rgba(21, 33, 53, 0.08); margin-bottom: 18px; }
-      .hero { display: grid; gap: 20px; grid-template-columns: 2fr 1fr; }
-      .score { width: 132px; height: 132px; border-radius: 50%; background: linear-gradient(135deg, var(--accent-2), #365c7c); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 800; }
-      .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-      .metric, .finding, .tool { border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.65); padding: 16px; }
-      .metric strong { display: block; font-size: 28px; margin-top: 6px; }
-      .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: "IBM Plex Sans", "Segoe UI", sans-serif; background: radial-gradient(circle at top right, #f4d794, transparent 28%), radial-gradient(circle at left center, #cfe7fb, transparent 20%), var(--bg); color: var(--ink); }
+      main { max-width: 1280px; margin: 0 auto; padding: 30px; }
+      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 18px 40px rgba(19, 32, 51, 0.08); margin-bottom: 18px; overflow: hidden; }
+      .hero { display: grid; grid-template-columns: 1.8fr 1fr; }
+      .hero-copy { padding: 28px; }
+      .hero-side { padding: 28px; background: linear-gradient(180deg, rgba(20,48,74,0.98), rgba(34,72,103,0.98)); color: white; }
+      .eyebrow { display: inline-block; margin-bottom: 12px; color: var(--muted); letter-spacing: 0.14em; font-size: 12px; text-transform: uppercase; }
+      .hero .eyebrow { color: #afd0e8; }
       h1, h2, h3, p { margin-top: 0; }
-      .badge { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-      .critical, .high { color: var(--danger); background: rgba(139, 38, 38, 0.12); }
-      .medium { color: var(--warn); background: rgba(153, 109, 0, 0.12); }
-      .low, .info { color: var(--ok); background: rgba(34, 93, 69, 0.12); }
-      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-      .chip { display: inline-flex; padding: 4px 10px; border-radius: 999px; background: rgba(23, 53, 82, 0.08); font-size: 12px; }
-      .code { white-space: pre-wrap; background: #0f1722; color: #dfe8f3; padding: 14px; border-radius: 14px; overflow: auto; font-family: "IBM Plex Mono", Consolas, monospace; font-size: 12px; }
-      .summary-list { margin: 0; padding-left: 18px; }
+      .score { width: 146px; height: 146px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), #f5d78f); color: #1d2127; display: flex; align-items: center; justify-content: center; font-size: 46px; font-weight: 800; margin-top: 8px; }
+      .hero-grid, .stats-grid, .findings-grid, .execution-grid { display: grid; gap: 14px; }
+      .hero-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 18px; }
+      .stat, .finding-card, .tool-card, .summary-box { border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.72); padding: 16px; }
+      .stat strong { display: block; margin-top: 8px; font-size: 28px; }
+      .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .severity-band { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+      .severity-block { padding: 14px; border-radius: 16px; color: white; }
+      .severity-block strong { display: block; margin-top: 8px; font-size: 30px; }
+      .severity-block.critical { background: linear-gradient(135deg, #981b1b, #c83f3f); }
+      .severity-block.high { background: linear-gradient(135deg, #a44d07, #d97d2f); }
+      .severity-block.medium { background: linear-gradient(135deg, #8e7200, #c4a227); }
+      .severity-block.low, .severity-block.info { background: linear-gradient(135deg, #225941, #42916b); }
+      .findings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .finding-card { position: relative; padding-left: 18px; }
+      .finding-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; border-radius: 16px 0 0 16px; background: #9aa8b8; }
+      .finding-card.critical::before { background: var(--critical); }
+      .finding-card.high::before { background: var(--high); }
+      .finding-card.medium::before { background: var(--medium); }
+      .finding-card.low::before, .finding-card.info::before { background: var(--low); }
+      .severity-pill { display: inline-flex; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+      .severity-pill.critical { color: var(--critical); background: rgba(159,29,29,0.12); }
+      .severity-pill.high { color: var(--high); background: rgba(188,91,4,0.12); }
+      .severity-pill.medium { color: var(--medium); background: rgba(157,122,0,0.12); }
+      .severity-pill.low, .severity-pill.info { color: var(--low); background: rgba(34,100,73,0.12); }
+      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
+      .chip { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: rgba(20,48,74,0.08); font-size: 12px; color: #29445f; }
+      .summary-box span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+      .summary-box strong { display: block; margin-top: 8px; font-size: 15px; }
+      .code { margin-top: 12px; padding: 14px; border-radius: 14px; background: #0f1825; color: #dfe8f3; white-space: pre-wrap; font: 12px/1.55 "IBM Plex Mono", Consolas, monospace; overflow: auto; }
+      .muted { color: var(--muted); }
     </style>
   </head>
   <body>
     <main>
       <section class="hero">
-        <div>
-          <div class="eyebrow">{{ report.profile.label }}</div>
+        <div class="hero-copy">
+          <span class="eyebrow">{{ report.profile.label }}</span>
           <h1>{{ report.executive_summary.headline }}</h1>
-          <p>{{ report.scan.repository_path }}</p>
-          <div class="grid">
-            <div class="metric"><span class="eyebrow">Findings</span><strong>{{ report.summary.total_findings }}</strong></div>
-            <div class="metric"><span class="eyebrow">Critical + high</span><strong>{{ report.executive_summary.critical_and_high }}</strong></div>
-            <div class="metric"><span class="eyebrow">Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
-            <div class="metric"><span class="eyebrow">Tools run</span><strong>{{ report.summary.tools_run|length }}</strong></div>
+          <p class="muted">{{ report.scan.repository_path }}</p>
+          <div class="hero-grid">
+            <div class="stat"><span>Findings</span><strong>{{ report.summary.total_findings }}</strong></div>
+            <div class="stat"><span>Critical + high</span><strong>{{ report.executive_summary.critical_and_high }}</strong></div>
+            <div class="stat"><span>Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
           </div>
         </div>
-        <div>
+        <div class="hero-side">
+          <div class="eyebrow">Repository posture</div>
           <div class="score">{{ report.summary.security_score }}</div>
+          <p style="margin-top:16px;">Scan ID {{ report.scan.scan_id }}</p>
+          <p>{{ report.summary.tools_run|length }} tools · {{ report.summary.languages|length }} languages · {{ report.executive_summary.repository_shape.total_files }} files</p>
         </div>
       </section>
 
       <section class="panel">
-        <div class="eyebrow">Top risks</div>
-        <h2>Repository risk brief</h2>
-        <ul class="summary-list">
-          {% for risk in report.executive_summary.top_risks %}
-            <li>{{ risk.title }} ({{ risk.severity }}) via {{ risk.tool }}{% if risk.location and risk.location != "n/a" %} at {{ risk.location }}{% endif %}</li>
-          {% endfor %}
-        </ul>
+        <div style="padding:24px;">
+          <span class="eyebrow">Severity band</span>
+          <h2>Exposure by severity</h2>
+          <div class="severity-band">
+            {% for severity, count in report.summary.severity_distribution.items() %}
+              <div class="severity-block {{ severity }}">
+                <span>{{ severity|upper }}</span>
+                <strong>{{ count }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
       </section>
 
       <section class="panel">
-        <div class="eyebrow">Findings</div>
-        <h2>Analyst review</h2>
-        <div class="grid">
-          {% for finding in report.findings %}
-            <article class="finding">
-              <span class="badge {{ finding.severity }}">{{ finding.severity }}</span>
-              <h3>{{ finding.title }}</h3>
-              <p>{{ finding.description }}</p>
-              <div class="chips">
-                <span class="chip">{{ finding.source_tool }}</span>
-                <span class="chip">{{ finding.category }}</span>
-                <span class="chip">file/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</span>
-                {% if finding.package %}<span class="chip">dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</span>{% endif %}
-                {% if finding.cve_ids %}<span class="chip">CVE/CWE/CVSS: {{ finding.cve_ids|join(", ") }}</span>{% endif %}
-              </div>
-              {% if report.profile.includes_rich_evidence and finding.rich_evidence %}
-                {% if finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
-                  <h3>Source snippets</h3>
+        <div style="padding:24px;">
+          <span class="eyebrow">Findings</span>
+          <h2>Investigation cards</h2>
+          <div class="findings-grid">
+            {% for finding in report.findings %}
+              <article class="finding-card {{ finding.severity }}">
+                <span class="severity-pill {{ finding.severity }}">{{ finding.severity }}</span>
+                <h3 style="margin-top:12px;">{{ finding.title }}</h3>
+                <p>{{ finding.description }}</p>
+                <div class="chip-row">
+                  <span class="chip">{{ finding.source_tool }}</span>
+                  <span class="chip">{{ finding.category }}</span>
+                  <span class="chip">File/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</span>
+                  {% if finding.package %}<span class="chip">Dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</span>{% endif %}
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+                  <div class="summary-box">
+                    <span>CVE</span>
+                    <strong>{{ finding.cve_ids|join(", ") if finding.cve_ids else "none" }}</strong>
+                  </div>
+                  <div class="summary-box">
+                    <span>CWE</span>
+                    <strong>{{ finding.cwe_ids|join(", ") if finding.cwe_ids else "none" }}</strong>
+                  </div>
+                  <div class="summary-box">
+                    <span>CVSS</span>
+                    <strong>{{ finding.cvss_score if finding.cvss_score is not none else "n/a" }}</strong>
+                  </div>
+                </div>
+                {% if finding.remediation %}
+                  <div class="summary-box" style="margin-top:12px;">
+                    <span>Remediation</span>
+                    <strong>{{ finding.remediation }}</strong>
+                  </div>
+                {% endif %}
+                {% if finding.ai_triage %}
+                  <div class="summary-box" style="margin-top:12px;">
+                    <span>AI triage</span>
+                    <strong>{{ finding.ai_triage }}</strong>
+                  </div>
+                {% endif %}
+                {% if report.profile.includes_rich_evidence and finding.rich_evidence and finding.rich_evidence.source_snippets and finding.rich_evidence.source_snippets.snippet %}
                   <div class="code">{{ finding.rich_evidence.source_snippets.snippet }}</div>
                 {% endif %}
-                {% if finding.rich_evidence.remediation %}
-                  <h3>Remediation</h3>
-                  <p>{{ finding.rich_evidence.remediation }}</p>
-                {% endif %}
-                {% if finding.rich_evidence.ai_triage %}
-                  <h3>AI triage</h3>
-                  <p>{{ finding.rich_evidence.ai_triage }}</p>
-                {% endif %}
-                {% if finding.rich_evidence.raw_scanner_output %}
-                  <h3>Raw scanner output</h3>
+                {% if report.profile.includes_rich_evidence and finding.rich_evidence and finding.rich_evidence.raw_scanner_output %}
                   <div class="code">{{ finding.rich_evidence.raw_scanner_output.stdout_excerpt or finding.rich_evidence.raw_scanner_output.stderr_excerpt or "" }}</div>
                 {% endif %}
-              {% endif %}
-            </article>
-          {% endfor %}
+              </article>
+            {% endfor %}
+          </div>
         </div>
       </section>
 
       {% if report.profile.includes_rich_evidence and report.tool_outputs %}
         <section class="panel">
-          <div class="eyebrow">Raw scanner output</div>
-          <h2>Tool execution detail</h2>
-          <div class="grid">
-            {% for tool in report.tool_outputs %}
-              <article class="tool">
-                <h3>{{ tool.tool }}</h3>
-                <p>Exit {{ tool.exit_code }} in {{ tool.duration_seconds }}s</p>
-                {% if tool.command %}<p><strong>Command:</strong> {{ tool.command|join(" ") }}</p>{% endif %}
-                {% if tool.stdout %}<div class="code">{{ tool.stdout }}</div>{% endif %}
-                {% if tool.stderr %}<div class="code">{{ tool.stderr }}</div>{% endif %}
-              </article>
-            {% endfor %}
+          <div style="padding:24px;">
+            <span class="eyebrow">Raw scanner output</span>
+            <h2>Tool execution detail</h2>
+            <div class="execution-grid">
+              {% for tool in report.tool_outputs %}
+                <article class="tool-card">
+                  <h3>{{ tool.tool }}</h3>
+                  <p class="muted">Exit {{ tool.exit_code }} · {{ tool.duration_seconds }}s</p>
+                  {% if tool.command %}<p><strong>Command:</strong> {{ tool.command|join(" ") }}</p>{% endif %}
+                  {% if tool.stdout %}<div class="code">{{ tool.stdout }}</div>{% endif %}
+                  {% if tool.stderr %}<div class="code">{{ tool.stderr }}</div>{% endif %}
+                </article>
+              {% endfor %}
+            </div>
           </div>
         </section>
       {% endif %}
