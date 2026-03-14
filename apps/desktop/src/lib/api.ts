@@ -18,6 +18,8 @@ export interface Finding {
   location?: {
     path?: string | null;
     line?: number | null;
+    column?: number | null;
+    snippet?: string | null;
   } | null;
   remediation?: string | null;
   ai_triage?: {
@@ -59,17 +61,22 @@ export interface ScanResult {
     helm_charts: string[];
     kubernetes_files: string[];
     terraform_files: string[];
+    total_files: number;
+    total_bytes: number;
   };
   tools: {
     tool: string;
     category: string;
     duration_seconds: number;
     exit_code: number;
+    command?: string[];
+    stdout?: string;
     stderr?: string;
+    output_files?: string[];
     binary_path?: string | null;
   }[];
   dependency_graph: {
-    nodes: { id: string; ecosystem: string; version?: string | null }[];
+    nodes: { id: string; ecosystem: string; version?: string | null; direct?: boolean; dependencies?: string[] }[];
     edges: [string, string][];
   };
 }
