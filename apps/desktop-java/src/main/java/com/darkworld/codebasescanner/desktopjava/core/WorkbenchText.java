@@ -79,6 +79,36 @@ public final class WorkbenchText {
         return joiner.toString();
     }
 
+    public static String formatDependencyDetails(ApiModels.DependencyNode dependencyNode, ApiModels.ScanResult scanResult) {
+        if (dependencyNode == null) {
+            return "Select a dependency to inspect package lineage and related findings.";
+        }
+
+        StringJoiner joiner = new StringJoiner(System.lineSeparator());
+        joiner.add("Package: " + safe(dependencyNode.id()));
+        joiner.add("Ecosystem: " + safe(dependencyNode.ecosystem()));
+        joiner.add("Version: " + safe(dependencyNode.version()));
+        joiner.add("Direct: " + String.valueOf(Boolean.TRUE.equals(dependencyNode.direct())));
+        joiner.add("Declared Dependencies: " + (dependencyNode.dependencies() == null ? 0 : dependencyNode.dependencies().size()));
+        joiner.add("");
+        joiner.add("Related Findings:");
+        if (scanResult == null || scanResult.safeFindings().isEmpty()) {
+            joiner.add(" - No findings are attached to the current scan.");
+            return joiner.toString();
+        }
+
+        scanResult.safeFindings().stream()
+                .filter(finding -> dependencyNode.id().equalsIgnoreCase(safe(finding.packageName())))
+                .findFirst()
+                .ifPresentOrElse(
+                        firstFinding -> scanResult.safeFindings().stream()
+                                .filter(finding -> dependencyNode.id().equalsIgnoreCase(safe(finding.packageName())))
+                                .forEach(finding -> joiner.add(" - [" + safe(finding.severity()) + "] " + safe(finding.title()))),
+                        () -> joiner.add(" - No package-linked findings matched this dependency.")
+                );
+        return joiner.toString();
+    }
+
     public static String formatScanOverview(ApiModels.ScanResult scanResult) {
         if (scanResult == null) {
             return "No persisted scans are available yet. Start a repository scan to populate the workbench.";

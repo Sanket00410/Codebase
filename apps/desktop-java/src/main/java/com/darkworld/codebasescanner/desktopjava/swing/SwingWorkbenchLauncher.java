@@ -65,6 +65,7 @@ public final class SwingWorkbenchLauncher {
     private JTabbedPane workspaceTabs;
     private JTable scansTable;
     private JTable findingsTable;
+    private JTable dependenciesTable;
     private JTable pluginsTable;
     private JList<String> artifactsList;
     private JTextArea overviewArea;
@@ -74,11 +75,13 @@ public final class SwingWorkbenchLauncher {
     private JTextArea consoleArea;
     private DefaultTableModel scansModel;
     private DefaultTableModel findingsModel;
+    private DefaultTableModel dependenciesModel;
     private DefaultTableModel pluginsModel;
 
     private DesktopApplicationService.DesktopSnapshot snapshot;
     private Path selectedRepository = repositoryRoot;
     private List<ApiModels.Finding> currentFindings = List.of();
+    private List<ApiModels.DependencyNode> currentDependencies = List.of();
     private List<ApiModels.Artifact> currentArtifacts = List.of();
     private List<ApiModels.PluginDescriptor> currentPlugins = List.of();
 
@@ -225,6 +228,7 @@ public final class SwingWorkbenchLauncher {
         workspaceTabs = new JTabbedPane();
         workspaceTabs.addTab("Overview", buildOverviewTab());
         workspaceTabs.addTab("Findings", buildFindingsTab());
+        workspaceTabs.addTab("Dependencies", buildDependenciesTab());
         workspaceTabs.addTab("Reports", buildReportsTab());
         workspaceTabs.addTab("Runtime", buildRuntimeTab());
 
@@ -309,9 +313,21 @@ public final class SwingWorkbenchLauncher {
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         actions.add(makeToolbarButton("Generate Reports", this::generateReports));
         actions.add(makeToolbarButton("Open Selected", this::openSelectedArtifact));
+        actions.add(makeToolbarButton("Open Report Folder", this::openActiveReportFolder));
 
         panel.add(actions, BorderLayout.NORTH);
         panel.add(splitPane, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildDependenciesTab() {
+        JPanel panel = new JPanel(new BorderLayout(12, 12));
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        dependenciesModel = tableModel("Package", "Ecosystem", "Version", "Direct");
+        dependenciesTable = new JTable(dependenciesModel);
+        dependenciesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        dependenciesTable.getSelectionModel().addListSelectionListener(this::onDependencySelected);
+        panel.add(new JScrollPane(dependenciesTable), BorderLayout.CENTER);
         return panel;
     }
 
@@ -446,6 +462,19 @@ public final class SwingWorkbenchLauncher {
         }
     }
 
+    private void openActiveReportFolder() {
+        if (snapshot == null || snapshot.activeScan() == null || snapshot.activeScan().safeArtifacts().isEmpty()) {
+            JOptionPane.showMessageDialog(frame, "No active report folder is available yet.");
+            return;
+        }
+        Path folder = Path.of(snapshot.activeScan().safeArtifacts().get(0).path()).getParent();
+        try {
+            Desktop.getDesktop().open(folder.toFile());
+        } catch (Exception error) {
+            showError("Unable to open report folder", error);
+        }
+    }
+
     private void applySnapshot(DesktopApplicationService.DesktopSnapshot latest) {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
         repositoryLabel.setText("Repository: " + latest.selectedRepository());
@@ -463,6 +492,7 @@ public final class SwingWorkbenchLauncher {
 
         ApiModels.ScanResult activeScan = latest.activeScan();
         currentFindings = activeScan != null ? activeScan.safeFindings() : List.of();
+        currentDependencies = activeScan != null && activeScan.dependencyGraph() != null ? activeScan.dependencyGraph().safeNodes() : List.of();
         findingsModel.setRowCount(0);
         currentFindings.forEach(finding -> findingsModel.addRow(new Object[]{
                 finding.severity(),
@@ -470,6 +500,14 @@ public final class SwingWorkbenchLauncher {
                 finding.sourceTool(),
                 finding.title(),
                 finding.location() != null ? finding.location().path() + ":" + finding.location().line() : "n/a"
+        }));
+
+        dependenciesModel.setRowCount(0);
+        currentDependencies.forEach(node -> dependenciesModel.addRow(new Object[]{
+                node.id(),
+                node.ecosystem(),
+                node.version(),
+                Boolean.TRUE.equals(node.direct()) ? "yes" : "no"
         }));
 
         currentArtifacts = activeScan != null ? activeScan.safeArtifacts() : List.of();
@@ -504,6 +542,9 @@ public final class SwingWorkbenchLauncher {
         if (!currentFindings.isEmpty()) {
             findingsTable.setRowSelectionInterval(0, 0);
         }
+        if (!currentDependencies.isEmpty()) {
+            dependenciesTable.setRowSelectionInterval(0, 0);
+        }
         if (!currentArtifacts.isEmpty()) {
             artifactsList.setSelectedIndex(0);
         }
@@ -521,8 +562,9 @@ public final class SwingWorkbenchLauncher {
         switch (label) {
             case "Overview" -> workspaceTabs.setSelectedIndex(0);
             case "Findings" -> workspaceTabs.setSelectedIndex(1);
-            case "Reports" -> workspaceTabs.setSelectedIndex(2);
-            case "Runtime" -> workspaceTabs.setSelectedIndex(3);
+            case "Dependencies" -> workspaceTabs.setSelectedIndex(2);
+            case "Reports" -> workspaceTabs.setSelectedIndex(3);
+            case "Runtime" -> workspaceTabs.setSelectedIndex(4);
             default -> {
             }
         }
@@ -564,6 +606,21 @@ public final class SwingWorkbenchLauncher {
         reportPreviewArea.setText(LocalFilePreviewer.filePreview(artifact.path(), 120_000, 320));
     }
 
+    private void onDependencySelected(ListSelectionEvent event) {
+        if (event.getValueIsAdjusting()) {
+            return;
+        }
+        int selectedRow = dependenciesTable.getSelectedRow();
+        if (selectedRow < 0 || selectedRow >= currentDependencies.size()) {
+            return;
+        }
+        inspectorArea.setText(WorkbenchText.formatDependencyDetails(
+                currentDependencies.get(selectedRow),
+                snapshot != null ? snapshot.activeScan() : null
+        ));
+        sourceArea.setText("Dependency intelligence is derived from SBOM and dependency graph data.");
+    }
+
     private void onPluginSelected(ListSelectionEvent event) {
         if (event.getValueIsAdjusting()) {
             return;
@@ -581,6 +638,7 @@ public final class SwingWorkbenchLauncher {
         DefaultMutableTreeNode workspace = new DefaultMutableTreeNode("Workspace");
         workspace.add(new DefaultMutableTreeNode("Overview"));
         workspace.add(new DefaultMutableTreeNode("Findings"));
+        workspace.add(new DefaultMutableTreeNode("Dependencies"));
         workspace.add(new DefaultMutableTreeNode("Reports"));
         workspace.add(new DefaultMutableTreeNode("Runtime"));
         root.add(workspace);

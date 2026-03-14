@@ -13,16 +13,19 @@ import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
@@ -35,6 +38,7 @@ import javafx.stage.Stage;
 
 import java.awt.Desktop;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -53,6 +57,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private Label findingsLabel;
     private Label toolsLabel;
     private Label statusLabel;
+    private Label artifactsLabel;
+    private Label missingToolsLabel;
     private TreeView<String> navigationTree;
     private TabPane workspaceTabs;
     private TextArea overviewArea;
@@ -62,12 +68,18 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private TextArea consoleArea;
     private ListView<ApiModels.ScanResult> scansList;
     private ListView<ApiModels.Finding> findingsList;
+    private ListView<ApiModels.DependencyNode> dependenciesList;
     private ListView<ApiModels.Artifact> artifactsList;
     private ListView<ApiModels.PluginDescriptor> pluginsList;
+    private TextField findingFilterField;
+    private TextField pluginFilterField;
+    private VBox reportProfilesBox;
+    private CheckBox includePlusVariantsCheck;
 
     private DesktopApplicationService.DesktopSnapshot snapshot;
     private Path selectedRepository = repositoryRoot;
     private List<ApiModels.Finding> currentFindings = List.of();
+    private List<ApiModels.DependencyNode> currentDependencies = List.of();
     private List<ApiModels.Artifact> currentArtifacts = List.of();
     private List<ApiModels.PluginDescriptor> currentPlugins = List.of();
 
@@ -193,8 +205,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
             switch (newValue.getValue()) {
                 case "Overview" -> workspaceTabs.getSelectionModel().select(0);
                 case "Findings" -> workspaceTabs.getSelectionModel().select(1);
-                case "Reports" -> workspaceTabs.getSelectionModel().select(2);
-                case "Runtime" -> workspaceTabs.getSelectionModel().select(3);
+                case "Dependencies" -> workspaceTabs.getSelectionModel().select(2);
+                case "Reports" -> workspaceTabs.getSelectionModel().select(3);
+                case "Runtime" -> workspaceTabs.getSelectionModel().select(4);
                 default -> {
                 }
             }
@@ -203,6 +216,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         workspaceTabs = new TabPane(
                 buildOverviewTab(),
                 buildFindingsTab(),
+                buildDependenciesTab(),
                 buildReportsTab(),
                 buildRuntimeTab()
         );
@@ -256,7 +270,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
         findingsLabel = metricLabel("Findings: --");
         toolsLabel = metricLabel("Tools: --");
         statusLabel = metricLabel("Status: idle");
-        HBox metrics = new HBox(12, scoreLabel, findingsLabel, toolsLabel, statusLabel);
+        artifactsLabel = metricLabel("Artifacts: --");
+        missingToolsLabel = metricLabel("Missing tools: --");
+        HBox metrics = new HBox(12, scoreLabel, findingsLabel, toolsLabel, statusLabel, artifactsLabel, missingToolsLabel);
 
         VBox content = new VBox(12, metrics, labeledSection("Repository Summary"), overviewArea, labeledSection("Recent Scans"), scansList);
         content.setPadding(new Insets(12));
@@ -266,6 +282,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
     }
 
     private Tab buildFindingsTab() {
+        findingFilterField = new TextField();
+        findingFilterField.setPromptText("Filter findings by severity, tool, title, or package");
+        findingFilterField.textProperty().addListener((obs, oldValue, newValue) -> applyFindingFilter());
         findingsList = new ListView<>();
         findingsList.setCellFactory(list -> new ListCell<>() {
             @Override
@@ -281,10 +300,37 @@ public final class JavaFxWorkbenchLauncher extends Application {
             inspectorArea.setText(WorkbenchText.formatFindingDetails(newValue));
             sourceArea.setText(LocalFilePreviewer.sourcePreview(selectedRepository, newValue));
         });
-        VBox content = new VBox(12, labeledSection("Findings"), findingsList);
+        VBox content = new VBox(12, labeledSection("Findings"), findingFilterField, findingsList);
         content.setPadding(new Insets(12));
         VBox.setVgrow(findingsList, Priority.ALWAYS);
         return nonClosableTab("Findings", content);
+    }
+
+    private Tab buildDependenciesTab() {
+        dependenciesList = new ListView<>();
+        dependenciesList.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(ApiModels.DependencyNode item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(item.id() + " | " + item.ecosystem() + " | " + (item.version() == null ? "n/a" : item.version()));
+            }
+        });
+        dependenciesList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
+            if (newValue == null) {
+                return;
+            }
+            inspectorArea.setText(WorkbenchText.formatDependencyDetails(newValue, snapshot != null ? snapshot.activeScan() : null));
+            sourceArea.setText("Dependency intelligence is derived from SBOM and dependency graph data, not direct source previews.");
+        });
+
+        VBox content = new VBox(12, labeledSection("Dependencies"), dependenciesList);
+        content.setPadding(new Insets(12));
+        VBox.setVgrow(dependenciesList, Priority.ALWAYS);
+        return nonClosableTab("Dependencies", content);
     }
 
     private Tab buildReportsTab() {
@@ -305,11 +351,29 @@ public final class JavaFxWorkbenchLauncher extends Application {
         });
 
         reportPreviewArea = readOnlyArea();
+        reportProfilesBox = new VBox(8);
+        includePlusVariantsCheck = new CheckBox("Include plus variants with evidence");
+        includePlusVariantsCheck.setSelected(true);
         Button generateButton = actionButton("Generate Reports", this::generateReports);
         Button openButton = actionButton("Open Selected", this::openSelectedArtifact);
-        HBox actions = new HBox(8, generateButton, openButton);
+        Button openFolderButton = actionButton("Open Report Folder", this::openActiveReportFolder);
+        HBox actions = new HBox(8, generateButton, openButton, openFolderButton);
+        ScrollPane profilesScroll = new ScrollPane(reportProfilesBox);
+        profilesScroll.setFitToWidth(true);
+        profilesScroll.setPrefViewportHeight(220);
+        VBox leftColumn = new VBox(
+                10,
+                labeledSection("Report Profiles"),
+                includePlusVariantsCheck,
+                profilesScroll,
+                labeledSection("Generated Artifacts"),
+                artifactsList
+        );
+        VBox.setVgrow(artifactsList, Priority.ALWAYS);
+        VBox.setVgrow(profilesScroll, Priority.ALWAYS);
         SplitPane split = new SplitPane(artifactsList, reportPreviewArea);
-        split.setDividerPositions(0.3);
+        split.getItems().setAll(leftColumn, reportPreviewArea);
+        split.setDividerPositions(0.36);
 
         VBox content = new VBox(12, actions, split);
         content.setPadding(new Insets(12));
@@ -318,6 +382,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
     }
 
     private Tab buildRuntimeTab() {
+        pluginFilterField = new TextField();
+        pluginFilterField.setPromptText("Filter tools by name, category, version, or install state");
+        pluginFilterField.textProperty().addListener((obs, oldValue, newValue) -> applyPluginFilter());
         pluginsList = new ListView<>();
         pluginsList.setCellFactory(list -> new ListCell<>() {
             @Override
@@ -334,7 +401,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
             sourceArea.setText("Tool runtimes do not have source previews.");
         });
         Button installButton = actionButton("Install Selected", this::installSelectedPlugin);
-        VBox content = new VBox(12, installButton, pluginsList);
+        VBox content = new VBox(12, installButton, pluginFilterField, pluginsList);
         content.setPadding(new Insets(12));
         VBox.setVgrow(pluginsList, Priority.ALWAYS);
         return nonClosableTab("Runtime", content);
@@ -394,11 +461,18 @@ public final class JavaFxWorkbenchLauncher extends Application {
             showError("Generate Reports", new IllegalStateException("No active scan is loaded yet."));
             return;
         }
-        List<String> profiles = snapshot.reportProfiles().stream().map(ApiModels.ReportProfileDefinition::id).toList();
-        runBackground("Generating report set", () -> service.generateReports(snapshot.activeScan().scanId(), profiles, true), artifacts -> {
+        List<String> profiles = selectedReportProfileIds();
+        if (profiles.isEmpty()) {
+            showError("Generate Reports", new IllegalStateException("Select at least one report profile."));
+            return;
+        }
+        runBackground(
+                "Generating report set",
+                () -> service.generateReports(snapshot.activeScan().scanId(), profiles, includePlusVariantsCheck.isSelected()),
+                artifacts -> {
             appendConsole("Generated " + artifacts.size() + " report artifacts for scan " + snapshot.activeScan().scanId());
             refreshSnapshot();
-            workspaceTabs.getSelectionModel().select(2);
+            workspaceTabs.getSelectionModel().select(3);
         });
     }
 
@@ -443,6 +517,19 @@ public final class JavaFxWorkbenchLauncher extends Application {
         }
     }
 
+    private void openActiveReportFolder() {
+        if (snapshot == null || snapshot.activeScan() == null || snapshot.activeScan().safeArtifacts().isEmpty()) {
+            showError("Open Report Folder", new IllegalStateException("No active scan artifacts are available yet."));
+            return;
+        }
+        Path folder = Path.of(snapshot.activeScan().safeArtifacts().get(0).path()).getParent();
+        try {
+            Desktop.getDesktop().open(folder.toFile());
+        } catch (Exception error) {
+            showError("Open Report Folder", error);
+        }
+    }
+
     private void applySnapshot(DesktopApplicationService.DesktopSnapshot latest) {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
         repositoryLabel.setText("Repository: " + latest.selectedRepository());
@@ -453,27 +540,37 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
         ApiModels.ScanResult activeScan = latest.activeScan();
         currentFindings = activeScan != null ? activeScan.safeFindings() : List.of();
+        currentDependencies = activeScan != null && activeScan.dependencyGraph() != null ? activeScan.dependencyGraph().safeNodes() : List.of();
         currentArtifacts = activeScan != null ? activeScan.safeArtifacts() : List.of();
         currentPlugins = latest.plugins();
-        findingsList.setItems(FXCollections.observableArrayList(currentFindings));
+        rebuildReportProfiles(latest.reportProfiles());
+        applyFindingFilter();
+        dependenciesList.setItems(FXCollections.observableArrayList(currentDependencies));
         artifactsList.setItems(FXCollections.observableArrayList(currentArtifacts));
-        pluginsList.setItems(FXCollections.observableArrayList(currentPlugins));
+        applyPluginFilter();
 
         if (activeScan != null && activeScan.summary() != null) {
             scoreLabel.setText("Score: " + activeScan.summary().score());
             findingsLabel.setText("Findings: " + activeScan.summary().totalFindings());
             toolsLabel.setText("Tools: " + activeScan.completedTools() + "/" + activeScan.totalTools());
             statusLabel.setText("Status: " + activeScan.status());
+            artifactsLabel.setText("Artifacts: " + currentArtifacts.size());
+            missingToolsLabel.setText("Missing tools: " + (int) currentPlugins.stream().filter(plugin -> !plugin.available()).count());
             inspectorArea.setText(WorkbenchText.formatScanOverview(activeScan));
         } else {
             scoreLabel.setText("Score: --");
             findingsLabel.setText("Findings: --");
             toolsLabel.setText("Tools: --");
             statusLabel.setText("Status: idle");
+            artifactsLabel.setText("Artifacts: --");
+            missingToolsLabel.setText("Missing tools: --");
         }
 
         if (!currentFindings.isEmpty()) {
             findingsList.getSelectionModel().select(0);
+        }
+        if (!currentDependencies.isEmpty()) {
+            dependenciesList.getSelectionModel().select(0);
         }
         if (!currentArtifacts.isEmpty()) {
             artifactsList.getSelectionModel().select(0);
@@ -483,6 +580,81 @@ public final class JavaFxWorkbenchLauncher extends Application {
         if (!currentPlugins.isEmpty()) {
             pluginsList.getSelectionModel().select(0);
         }
+    }
+
+    private void applyFindingFilter() {
+        String query = findingFilterField != null && findingFilterField.getText() != null
+                ? findingFilterField.getText().trim().toLowerCase()
+                : "";
+        if (query.isBlank()) {
+            findingsList.setItems(FXCollections.observableArrayList(currentFindings));
+            return;
+        }
+        findingsList.setItems(FXCollections.observableArrayList(
+                currentFindings.stream().filter(finding -> matchesFindingQuery(finding, query)).toList()
+        ));
+    }
+
+    private void applyPluginFilter() {
+        String query = pluginFilterField != null && pluginFilterField.getText() != null
+                ? pluginFilterField.getText().trim().toLowerCase()
+                : "";
+        if (query.isBlank()) {
+            pluginsList.setItems(FXCollections.observableArrayList(currentPlugins));
+            return;
+        }
+        pluginsList.setItems(FXCollections.observableArrayList(
+                currentPlugins.stream().filter(plugin -> matchesPluginQuery(plugin, query)).toList()
+        ));
+    }
+
+    private void rebuildReportProfiles(List<ApiModels.ReportProfileDefinition> profiles) {
+        if (reportProfilesBox == null) {
+            return;
+        }
+        List<String> previouslySelected = selectedReportProfileIds();
+        reportProfilesBox.getChildren().clear();
+        for (ApiModels.ReportProfileDefinition profile : profiles) {
+            CheckBox checkBox = new CheckBox(profile.label() + " (" + profile.extension() + ")");
+            checkBox.setUserData(profile.id());
+            checkBox.setSelected(previouslySelected.isEmpty() || previouslySelected.contains(profile.id()));
+            checkBox.setWrapText(true);
+            checkBox.setAccessibleText(profile.description());
+            reportProfilesBox.getChildren().add(checkBox);
+        }
+    }
+
+    private List<String> selectedReportProfileIds() {
+        List<String> selectedIds = new ArrayList<>();
+        if (reportProfilesBox == null) {
+            return selectedIds;
+        }
+        reportProfilesBox.getChildren().forEach(node -> {
+            if (node instanceof CheckBox checkBox && checkBox.isSelected() && checkBox.getUserData() instanceof String id) {
+                selectedIds.add(id);
+            }
+        });
+        return selectedIds;
+    }
+
+    private boolean matchesFindingQuery(ApiModels.Finding finding, String query) {
+        return containsIgnoreCase(finding.title(), query)
+                || containsIgnoreCase(finding.severity(), query)
+                || containsIgnoreCase(finding.sourceTool(), query)
+                || containsIgnoreCase(finding.category(), query)
+                || containsIgnoreCase(finding.packageName(), query);
+    }
+
+    private boolean matchesPluginQuery(ApiModels.PluginDescriptor plugin, String query) {
+        return containsIgnoreCase(plugin.metadata().displayName(), query)
+                || containsIgnoreCase(plugin.metadata().category(), query)
+                || containsIgnoreCase(plugin.metadata().installStrategy(), query)
+                || containsIgnoreCase(plugin.binaryStatus() != null ? plugin.binaryStatus().version() : null, query)
+                || containsIgnoreCase(plugin.available() ? "installed" : "missing", query);
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase().contains(query);
     }
 
     private <T> void runBackground(String activity, Callable<T> task, Consumer<T> onSuccess) {
@@ -544,6 +716,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         workspace.getChildren().addAll(
                 new TreeItem<>("Overview"),
                 new TreeItem<>("Findings"),
+                new TreeItem<>("Dependencies"),
                 new TreeItem<>("Reports"),
                 new TreeItem<>("Runtime")
         );
