@@ -4,6 +4,8 @@ use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::thread;
+use std::time::{Duration, Instant};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
@@ -13,6 +15,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 const BACKEND_HOST: &str = "127.0.0.1";
 const BACKEND_PORT: &str = "8686";
+const BACKEND_STARTUP_TIMEOUT_SECS: u64 = 20;
+const BACKEND_EXISTING_WAIT_SECS: u64 = 4;
 
 #[derive(Default)]
 struct BackendState {
@@ -41,14 +45,19 @@ struct SourceWindowPayload {
 
 #[tauri::command]
 fn start_backend(app: AppHandle, state: State<BackendState>) -> Result<BackendStatus, String> {
+    let data_dir = runtime_data_dir(&app)?;
+    let pid_path = data_dir.join("backend.pid");
+
     let mut guard = state.child.lock().map_err(|_| "Backend state lock poisoned".to_string())?;
     if let Some(child) = guard.as_mut() {
         match child.try_wait() {
             Ok(None) => {
+                wait_for_backend_ready(Duration::from_secs(BACKEND_STARTUP_TIMEOUT_SECS))?;
+                let _ = persist_backend_pid(&pid_path);
                 return Ok(BackendStatus {
                     running: true,
                     port: BACKEND_PORT.parse().unwrap_or(8686),
-                })
+                });
             }
             Ok(Some(_)) => {
                 *guard = None;
@@ -57,18 +66,23 @@ fn start_backend(app: AppHandle, state: State<BackendState>) -> Result<BackendSt
         }
     }
     if backend_healthy() {
+        let _ = persist_backend_pid(&pid_path);
         return Ok(BackendStatus {
             running: true,
             port: BACKEND_PORT.parse().unwrap_or(8686),
         });
     }
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("runtime");
-    fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
+    if pid_path.exists() {
+        if wait_for_backend_ready(Duration::from_secs(BACKEND_EXISTING_WAIT_SECS)).is_ok() {
+            let _ = persist_backend_pid(&pid_path);
+            return Ok(BackendStatus {
+                running: true,
+                port: BACKEND_PORT.parse().unwrap_or(8686),
+            });
+        }
+        let _ = fs::remove_file(&pid_path);
+    }
 
     let (binary, args, cwd) = backend_command(&app)?;
     let stdout_log = OpenOptions::new()
@@ -87,15 +101,30 @@ fn start_backend(app: AppHandle, state: State<BackendState>) -> Result<BackendSt
         .current_dir(cwd)
         .env("SCANNER_PLATFORM_HOST", BACKEND_HOST)
         .env("SCANNER_PLATFORM_PORT", BACKEND_PORT)
-        .env("SCANNER_PLATFORM_DATA_DIR", data_dir)
+        .env("SCANNER_PLATFORM_DATA_DIR", &data_dir)
+        .env("SCANNER_PLATFORM_PID_FILE", pid_path.as_os_str())
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout_log))
         .stderr(Stdio::from(stderr_log));
     #[cfg(target_os = "windows")]
     command.creation_flags(0x08000000);
 
+    let _ = fs::remove_file(&pid_path);
     let child = command.spawn().map_err(|error| format!("Unable to launch backend: {error}"))?;
     *guard = Some(child);
+
+    if let Err(error) = wait_for_backend_ready(Duration::from_secs(BACKEND_STARTUP_TIMEOUT_SECS)) {
+        if let Some(child) = guard.as_mut() {
+            let _ = child.kill();
+        }
+        *guard = None;
+        let _ = fs::remove_file(&pid_path);
+        return Err(format!(
+            "Backend failed to become ready: {error}. Check {}",
+            data_dir.join("backend.stderr.log").display()
+        ));
+    }
+    let _ = persist_backend_pid(&pid_path);
 
     Ok(BackendStatus {
         running: true,
@@ -104,25 +133,22 @@ fn start_backend(app: AppHandle, state: State<BackendState>) -> Result<BackendSt
 }
 
 #[tauri::command]
-fn stop_backend(state: State<BackendState>) -> Result<(), String> {
+fn stop_backend(app: AppHandle, state: State<BackendState>) -> Result<(), String> {
     let mut guard = state.child.lock().map_err(|_| "Backend state lock poisoned".to_string())?;
-    if let Some(mut child) = guard.take() {
-        child.kill().map_err(|error| error.to_string())?;
-    }
-    Ok(())
+    stop_backend_child(&app, &mut guard)
 }
 
 #[tauri::command]
 fn backend_status(state: State<BackendState>) -> Result<BackendStatus, String> {
     let mut guard = state.child.lock().map_err(|_| "Backend state lock poisoned".to_string())?;
-    let running = if let Some(child) = guard.as_mut() {
-        child.try_wait().map_err(|error| error.to_string())?.is_none()
+    if let Some(child) = guard.as_mut() {
+        if child.try_wait().map_err(|error| error.to_string())?.is_some() {
+            *guard = None;
+        }
     } else {
-        false
-    };
-    if !running {
         *guard = None;
     }
+    let running = backend_healthy();
     Ok(BackendStatus {
         running,
         port: BACKEND_PORT.parse().unwrap_or(8686),
@@ -248,6 +274,136 @@ fn configure_native_menu(app: &AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     app.set_menu(menu).map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn runtime_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("runtime");
+    fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
+    Ok(data_dir)
+}
+
+fn wait_for_backend_ready(timeout: Duration) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if backend_healthy() {
+            return Ok(());
+        }
+
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "backend did not respond on http://{BACKEND_HOST}:{BACKEND_PORT}/health within {} seconds",
+                timeout.as_secs()
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(250));
+    }
+}
+
+fn stop_backend_child(app: &AppHandle, guard: &mut Option<Child>) -> Result<(), String> {
+    if let Ok(data_dir) = runtime_data_dir(app) {
+        let pid_path = data_dir.join("backend.pid");
+        if let Some(pid) = read_backend_pid(&pid_path).or_else(backend_listening_pid) {
+            let _ = kill_backend_pid(pid);
+        }
+        let _ = fs::remove_file(pid_path);
+    }
+
+    if let Some(mut child) = guard.take() {
+        match child.try_wait() {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                child.kill().map_err(|error| error.to_string())?;
+                let _ = child.wait();
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(())
+}
+
+fn kill_backend_pid(pid: u32) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new("taskkill");
+        command
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x08000000);
+        let status = command.status().map_err(|error| error.to_string())?;
+        if status.success() {
+            return Ok(());
+        }
+        return Err(format!("taskkill exited with status {status}"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .map_err(|error| error.to_string())?;
+        if status.success() {
+            return Ok(());
+        }
+        return Err(format!("kill exited with status {status}"));
+    }
+}
+
+fn persist_backend_pid(pid_path: &PathBuf) -> Result<(), String> {
+    if pid_path.exists() {
+        return Ok(());
+    }
+    let Some(pid) = backend_listening_pid() else {
+        return Ok(());
+    };
+    fs::write(pid_path, pid.to_string()).map_err(|error| error.to_string())
+}
+
+fn read_backend_pid(pid_path: &PathBuf) -> Option<u32> {
+    let contents = fs::read_to_string(pid_path).ok()?;
+    contents.trim().parse::<u32>().ok()
+}
+
+fn backend_listening_pid() -> Option<u32> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("netstat")
+            .args(["-ano", "-p", "tcp"])
+            .output()
+            .ok()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if !trimmed.contains("LISTENING") || !trimmed.contains(&format!(":{BACKEND_PORT}")) {
+                continue;
+            }
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() < 5 {
+                continue;
+            }
+            if let Ok(pid) = parts[4].parse::<u32>() {
+                return Some(pid);
+            }
+        }
+        return None;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("lsof")
+            .args(["-ti", &format!("tcp:{BACKEND_PORT}"), "-sTCP:LISTEN"])
+            .output()
+            .ok()?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return stdout.lines().find_map(|line| line.trim().parse::<u32>().ok());
+    }
 }
 
 fn backend_command(app: &AppHandle) -> Result<(String, Vec<String>, PathBuf), String> {
@@ -379,6 +535,12 @@ pub fn run() {
                         id: id.to_string(),
                     },
                 );
+            }
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                let state = window.state::<BackendState>();
+                let _ = stop_backend(window.app_handle().clone(), state);
             }
         })
         .invoke_handler(tauri::generate_handler![

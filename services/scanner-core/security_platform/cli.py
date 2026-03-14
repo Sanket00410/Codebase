@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
+from pathlib import Path
 
 import uvicorn
 
@@ -83,11 +85,38 @@ def _configure_stdout() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
+def _pid_file_path() -> Path | None:
+    raw = os.getenv("SCANNER_PLATFORM_PID_FILE")
+    return Path(raw) if raw else None
+
+
+def _write_pid_file() -> None:
+    pid_file = _pid_file_path()
+    if not pid_file:
+        return
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def _remove_pid_file() -> None:
+    pid_file = _pid_file_path()
+    if not pid_file:
+        return
+    try:
+        pid_file.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     if args.command == "serve":
-        uvicorn.run("security_platform.api.main:app", host=args.host, port=args.port, reload=False)
+        _write_pid_file()
+        try:
+            uvicorn.run("security_platform.api.main:app", host=args.host, port=args.port, reload=False)
+        finally:
+            _remove_pid_file()
         return
     if args.command == "scan":
         raise SystemExit(asyncio.run(_run_scan(args)))

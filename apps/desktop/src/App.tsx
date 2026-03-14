@@ -150,6 +150,8 @@ const menuLabels: Record<Exclude<MenuId, null>, string> = {
   help: "Help",
 };
 
+let backendBootstrapRequested = false;
+
 const workbenchLayoutStorageKey = "code-base-scanner.workbench-layout.v5";
 const minLeftDockWidth = 240;
 const maxLeftDockWidth = 520;
@@ -824,6 +826,12 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
+    if (backendBootstrapRequested) {
+      return () => {
+        mounted = false;
+      };
+    }
+    backendBootstrapRequested = true;
     const bootstrap = async () => {
       try {
         await invoke("start_backend");
@@ -845,6 +853,7 @@ export default function App() {
         }
         throw new Error("Backend failed to start within 30 seconds");
       } catch (cause) {
+        backendBootstrapRequested = false;
         if (!mounted) {
           return;
         }
