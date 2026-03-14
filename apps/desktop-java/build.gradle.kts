@@ -38,6 +38,9 @@ application {
     mainClass.set("com.darkworld.codebasescanner.desktopjava.swing.SwingWorkbenchLauncher")
 }
 
+val installLibDir = layout.buildDirectory.dir("install/${project.name}/lib")
+val packageRootDir = layout.buildDirectory.dir("jpackage")
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(21)
@@ -79,4 +82,54 @@ tasks.register<JavaExec>("smokeTestJavaFx") {
     description = "Bootstrap the JavaFX rewrite path without keeping the UI open."
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("com.darkworld.codebasescanner.desktopjava.javafx.JavaFxSmokeTest")
+}
+
+tasks.register<Exec>("packageSwingAppImage") {
+    group = "distribution"
+    description = "Package the Swing rewrite path as a jpackage app-image."
+    dependsOn("installDist")
+    doFirst {
+        val javaHome = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
+        val jpackageName = if (currentOs.isWindows) "jpackage.exe" else "jpackage"
+        val jpackageExecutable = file("$javaHome/bin/$jpackageName")
+        val outputDir = packageRootDir.get().dir("swing").asFile
+        outputDir.mkdirs()
+        commandLine(
+            jpackageExecutable.absolutePath,
+            "--type", "app-image",
+            "--dest", outputDir.absolutePath,
+            "--name", "CodeBaseScannerSwing",
+            "--input", installLibDir.get().asFile.absolutePath,
+            "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
+            "--main-class", "com.darkworld.codebasescanner.desktopjava.swing.SwingWorkbenchLauncher",
+            "--java-options", "-Dfile.encoding=UTF-8"
+        )
+    }
+}
+
+tasks.register<Exec>("packageJavaFxAppImage") {
+    group = "distribution"
+    description = "Package the JavaFX rewrite path as a jpackage app-image."
+    dependsOn("installDist")
+    doFirst {
+        val javaHome = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
+        val jpackageName = if (currentOs.isWindows) "jpackage.exe" else "jpackage"
+        val jpackageExecutable = file("$javaHome/bin/$jpackageName")
+        val outputDir = packageRootDir.get().dir("javafx").asFile
+        outputDir.mkdirs()
+        commandLine(
+            jpackageExecutable.absolutePath,
+            "--type", "app-image",
+            "--dest", outputDir.absolutePath,
+            "--name", "CodeBaseScannerJavaFx",
+            "--input", installLibDir.get().asFile.absolutePath,
+            "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
+            "--main-class", "com.darkworld.codebasescanner.desktopjava.javafx.JavaFxWorkbenchLauncher",
+            "--java-options", "-Dfile.encoding=UTF-8",
+            "--java-options", "--module-path",
+            "--java-options", "\$APPDIR\\lib",
+            "--java-options", "--add-modules",
+            "--java-options", "javafx.controls,javafx.graphics,javafx.base"
+        )
+    }
 }

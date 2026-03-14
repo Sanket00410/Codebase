@@ -43,3 +43,11 @@ JavaFX smoke test:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build-java-desktop.ps1 -Task smokeTestJavaFx
 ```
+
+## Package
+
+Create Windows app-image packaging for the rewrite path:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-java-desktop.ps1 -Flavor both
+```
