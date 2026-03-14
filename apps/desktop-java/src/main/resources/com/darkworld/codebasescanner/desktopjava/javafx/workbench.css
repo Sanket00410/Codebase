@@ -1,0 +1,71 @@
+.root {
+    -fx-base: #0f1724;
+    -fx-background: #0f1724;
+    -fx-control-inner-background: #162033;
+    -fx-accent: #4f8cff;
+    -fx-focus-color: #4f8cff;
+    -fx-faint-focus-color: transparent;
+    -fx-text-fill: #edf3ff;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI", "Inter", sans-serif;
+}
+
+.workbench-root {
+    -fx-background-color: linear-gradient(to bottom, #101827, #0d1522);
+}
+
+.header-bar {
+    -fx-background-color: #121c2c;
+    -fx-border-color: #22314d;
+    -fx-border-width: 0 0 1 0;
+}
+
+.header-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: 700;
+}
+
+.metric-label {
+    -fx-background-color: #16233a;
+    -fx-background-radius: 10px;
+    -fx-border-radius: 10px;
+    -fx-border-color: #2a3d61;
+    -fx-padding: 10 14 10 14;
+    -fx-font-weight: 600;
+}
+
+.section-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #b7c6e4;
+}
+
+.console-box {
+    -fx-background-color: #101827;
+    -fx-border-color: #22314d;
+    -fx-border-width: 1 0 0 0;
+}
+
+.status-bar {
+    -fx-background-color: #101827;
+    -fx-border-color: #22314d;
+    -fx-border-width: 1 0 0 0;
+}
+
+.tool-bar {
+    -fx-background-color: #121c2c;
+}
+
+.text-area {
+    -fx-background-color: #162033;
+    -fx-text-fill: #edf3ff;
+    -fx-highlight-fill: #3059b9;
+    -fx-highlight-text-fill: white;
+}
+
+.list-view,
+.tree-view,
+.tab-pane,
+.split-pane {
+    -fx-background-color: #101827;
+}

@@ -6,6 +6,7 @@ dist/
 build/
 node_modules/
 target/
+.tools/
 .idea/
 .vscode/
 *.pyc
@@ -24,4 +25,3 @@ reports/
 data/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/target/
-
