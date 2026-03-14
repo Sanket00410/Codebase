@@ -150,7 +150,7 @@ const menuLabels: Record<Exclude<MenuId, null>, string> = {
   help: "Help",
 };
 
-const workbenchLayoutStorageKey = "code-base-scanner.workbench-layout.v3";
+const workbenchLayoutStorageKey = "code-base-scanner.workbench-layout.v5";
 const minLeftDockWidth = 240;
 const maxLeftDockWidth = 520;
 const minRightDockWidth = 300;
@@ -164,9 +164,9 @@ const defaultWorkbenchLayout: WorkbenchLayoutState = {
   showTreeDock: true,
   showInspectorDock: true,
   showConsoleDock: true,
-  leftDockWidth: 280,
-  rightDockWidth: 340,
-  consoleHeight: 200,
+  leftDockWidth: 252,
+  rightDockWidth: 308,
+  consoleHeight: 164,
 };
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -2921,33 +2921,36 @@ export default function App() {
 
         <section className="workspace-panel">
           <div className="workspace-header">
-            <div>
+            <div className="workspace-heading">
               <span className="eyebrow">{currentTabMeta.eyebrow}</span>
               <h1>{currentTabMeta.label}</h1>
               <p>{currentTabMeta.description}</p>
             </div>
-            <div className="workspace-header-metrics">
-              {workspaceMetrics.map((metric) => (
-                <div key={metric.label} className="header-metric">
-                  <span>{metric.label}</span>
-                  <strong>{metric.value}</strong>
-                </div>
-              ))}
-            </div>
           </div>
 
-          <div className="tab-strip">
-            {workspaceTabs.map((tab) => (
-              <button
-                key={tab}
-                className={`tab-button ${activeTab === tab ? "active" : ""}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                <span>{workspaceMeta[tab].eyebrow}</span>
-                <strong>{workspaceMeta[tab].label}</strong>
-              </button>
+          <div className="workspace-summary-strip">
+            {workspaceMetrics.map((metric) => (
+              <div key={metric.label} className="header-metric">
+                <span>{metric.label}</span>
+                <strong>{metric.value}</strong>
+              </div>
             ))}
           </div>
+
+          {!showTreeDock ? (
+            <div className="tab-strip">
+              {workspaceTabs.map((tab) => (
+                <button
+                  key={tab}
+                  className={`tab-button ${activeTab === tab ? "active" : ""}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  <span>{workspaceMeta[tab].eyebrow}</span>
+                  <strong>{workspaceMeta[tab].label}</strong>
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <div className="workspace-body">
             {activeTab === "dashboard" ? renderDashboard() : null}
