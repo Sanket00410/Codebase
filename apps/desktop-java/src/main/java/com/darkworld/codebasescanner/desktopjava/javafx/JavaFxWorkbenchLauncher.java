@@ -5,6 +5,7 @@ import com.darkworld.codebasescanner.desktopjava.core.DesktopApplicationService;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopBranding;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopPaths;
 import com.darkworld.codebasescanner.desktopjava.core.LocalFilePreviewer;
+import com.darkworld.codebasescanner.desktopjava.core.ReportArtifactSupport;
 import com.darkworld.codebasescanner.desktopjava.core.WorkbenchText;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -18,7 +19,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -39,6 +39,7 @@ import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
@@ -94,6 +95,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private TextField pluginFilterField;
     private Label reportFolderLabel;
     private Label latestArtifactLabel;
+    private Label generatedReportsLabel;
     private VBox reportProfilesBox;
     private CheckBox includePlusVariantsCheck;
 
@@ -423,11 +425,25 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private Tab buildReportsTab() {
         artifactsList = new ListView<>();
+        artifactsList.getStyleClass().add("artifact-list");
         artifactsList.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(ApiModels.Artifact item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : (item.label() == null || item.label().isBlank() ? item.kind() : item.label()));
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    return;
+                }
+                Label primary = new Label(ReportArtifactSupport.displayName(item));
+                primary.getStyleClass().add("artifact-primary");
+                Label secondary = new Label(ReportArtifactSupport.subtitle(item));
+                secondary.getStyleClass().add("artifact-secondary");
+                secondary.setWrapText(true);
+                VBox content = new VBox(4, primary, secondary);
+                content.getStyleClass().add("artifact-cell");
+                setText(null);
+                setGraphic(content);
             }
         });
         artifactsList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
@@ -442,39 +458,56 @@ public final class JavaFxWorkbenchLauncher extends Application {
         reportProfilesBox = new VBox(8);
         includePlusVariantsCheck = new CheckBox("Include plus variants with evidence");
         includePlusVariantsCheck.setSelected(true);
-        Button generateButton = primaryActionButton("Generate Reports", this::generateReports);
+        Button generateButton = primaryActionButton("Generate Selected Reports", this::generateReports);
         Button openButton = actionButton("Open Selected", this::openSelectedArtifact);
         Button openFolderButton = actionButton("Open Report Folder", this::openActiveReportFolder);
         Button openLatestButton = actionButton("Open Latest Report", this::openLatestArtifact);
         FlowPane actions = new FlowPane(8, 8, generateButton, openButton, openFolderButton, openLatestButton);
         actions.getStyleClass().add("actions-flow");
+        Label reportHintLabel = new Label(
+                "Choose the report profiles below. New reports open automatically after generation and the save location is shown here."
+        );
+        reportHintLabel.getStyleClass().add("status-line");
+        reportHintLabel.setWrapText(true);
         reportFolderLabel = new Label("Report folder: unavailable");
         reportFolderLabel.getStyleClass().add("status-line");
         latestArtifactLabel = new Label("Latest artifact: none");
         latestArtifactLabel.getStyleClass().add("status-line");
+        generatedReportsLabel = new Label("Generated reports: --");
+        generatedReportsLabel.getStyleClass().add("status-line");
         ScrollPane profilesScroll = new ScrollPane(reportProfilesBox);
         profilesScroll.setFitToWidth(true);
-        profilesScroll.setPrefViewportHeight(220);
+        profilesScroll.setPrefViewportHeight(180);
+        GridPane reportSummary = new GridPane();
+        reportSummary.getStyleClass().add("report-summary-grid");
+        reportSummary.setHgap(12);
+        reportSummary.setVgap(8);
+        reportSummary.add(labeledSection("Report Output"), 0, 0);
+        reportSummary.add(reportHintLabel, 0, 1, 2, 1);
+        reportSummary.add(reportFolderLabel, 0, 2);
+        reportSummary.add(latestArtifactLabel, 0, 3);
+        reportSummary.add(generatedReportsLabel, 1, 2);
         VBox leftColumn = new VBox(
                 10,
+                reportSummary,
                 labeledSection("Report Profiles"),
                 includePlusVariantsCheck,
                 profilesScroll,
                 labeledSection("Generated Artifacts"),
                 artifactsList
         );
+        leftColumn.getStyleClass().add("report-left-column");
         VBox.setVgrow(artifactsList, Priority.ALWAYS);
-        VBox.setVgrow(profilesScroll, Priority.ALWAYS);
-        SplitPane split = new SplitPane(artifactsList, reportPreviewArea);
+        SplitPane split = new SplitPane(leftColumn, reportPreviewArea);
         split.getStyleClass().add("report-split");
-        split.getItems().setAll(leftColumn, reportPreviewArea);
         split.setDividerPositions(0.36);
 
-        VBox content = new VBox(12, actions, reportFolderLabel, latestArtifactLabel, split);
-        content.getStyleClass().add("workspace-pane");
-        content.setPadding(new Insets(12));
+        reportPreviewArea.setText("Generate or select a report to preview it here.");
+        VBox shell = new VBox(12, actions, split);
+        shell.getStyleClass().add("workspace-pane");
+        shell.setPadding(new Insets(12));
         VBox.setVgrow(split, Priority.ALWAYS);
-        return nonClosableTab("Reports", content);
+        return nonClosableTab("Reports", shell);
     }
 
     private Tab buildRuntimeTab() {
@@ -569,76 +602,23 @@ public final class JavaFxWorkbenchLauncher extends Application {
             showError("Generate Reports", new IllegalStateException("No active scan is loaded yet."));
             return;
         }
-        ReportGenerationSelection selection = showReportGenerationDialog();
-        if (selection == null) {
-            return;
+        List<String> selectedProfiles = selectedReportProfileIds();
+        if (selectedProfiles.isEmpty()) {
+            selectedProfiles = snapshot.reportProfiles().stream().map(ApiModels.ReportProfileDefinition::id).toList();
+            syncReportProfileSelection(selectedProfiles);
         }
+        boolean includePlusVariants = includePlusVariantsCheck != null && includePlusVariantsCheck.isSelected();
+        List<String> requestedProfiles = selectedProfiles;
         runBackground(
                 "Generating report set",
-                () -> service.generateReports(snapshot.activeScan().scanId(), selection.profileIds(), selection.includePlusVariants()),
-                artifacts -> {
-            appendConsole("Generated " + artifacts.size() + " report artifacts for scan " + snapshot.activeScan().scanId());
-            refreshSnapshot();
+                () -> service.generateReports(snapshot.activeScan().scanId(), requestedProfiles, includePlusVariants, selectedRepository),
+                outcome -> {
+            snapshot = outcome.snapshot();
+            applySnapshot(snapshot);
             workspaceTabs.getSelectionModel().select(3);
             bottomDockTabs.getSelectionModel().select(0);
+            announceGeneratedReports(outcome.generatedArtifacts());
         });
-    }
-
-    private ReportGenerationSelection showReportGenerationDialog() {
-        Dialog<ReportGenerationSelection> dialog = new Dialog<>();
-        dialog.initOwner(stage);
-        dialog.setTitle("Generate Reports");
-        dialog.setHeaderText("Choose report profiles and evidence depth for the active scan.");
-
-        ButtonType generateType = new ButtonType("Generate", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(generateType, ButtonType.CANCEL);
-
-        VBox content = new VBox(10);
-        content.setPadding(new Insets(8));
-        CheckBox includePlus = new CheckBox("Include plus variants with raw output, snippets, package evidence, CVE/CWE/CVSS, remediation, and AI triage");
-        includePlus.setSelected(includePlusVariantsCheck != null && includePlusVariantsCheck.isSelected());
-        VBox profileOptions = new VBox(8);
-
-        List<String> preselected = selectedReportProfileIds();
-        for (ApiModels.ReportProfileDefinition profile : snapshot.reportProfiles()) {
-            CheckBox option = new CheckBox(profile.label() + " (" + profile.extension() + ")");
-            option.setUserData(profile.id());
-            option.setWrapText(true);
-            option.setSelected(preselected.isEmpty() || preselected.contains(profile.id()));
-            profileOptions.getChildren().add(option);
-        }
-
-        ScrollPane scrollPane = new ScrollPane(profileOptions);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setPrefViewportHeight(260);
-        content.getChildren().addAll(
-                labeledSection("Output Profiles"),
-                scrollPane,
-                includePlus
-        );
-        dialog.getDialogPane().setContent(content);
-
-        dialog.setResultConverter(button -> {
-            if (button != generateType) {
-                return null;
-            }
-            List<String> profileIds = new ArrayList<>();
-            profileOptions.getChildren().forEach(node -> {
-                if (node instanceof CheckBox checkBox && checkBox.isSelected() && checkBox.getUserData() instanceof String id) {
-                    profileIds.add(id);
-                }
-            });
-            if (profileIds.isEmpty()) {
-                return null;
-            }
-            if (includePlusVariantsCheck != null) {
-                includePlusVariantsCheck.setSelected(includePlus.isSelected());
-            }
-            syncReportProfileSelection(profileIds);
-            return new ReportGenerationSelection(profileIds, includePlus.isSelected());
-        });
-
-        return dialog.showAndWait().orElse(null);
     }
 
     private void installSelectedPlugin() {
@@ -680,35 +660,66 @@ public final class JavaFxWorkbenchLauncher extends Application {
             showError("Open Artifact", new IllegalStateException("Select a report artifact first."));
             return;
         }
+        openArtifact(artifact, "Open Artifact");
+    }
+
+    private void openArtifact(ApiModels.Artifact artifact, String activity) {
         try {
             Desktop.getDesktop().open(Path.of(artifact.path()).toFile());
         } catch (Exception error) {
-            showError("Open Artifact", error);
+            showError(activity, error);
         }
     }
 
     private void openLatestArtifact() {
-        if (currentArtifacts.isEmpty()) {
+        var artifact = ReportArtifactSupport.preferredOpenArtifact(currentArtifacts);
+        if (artifact.isEmpty()) {
             showError("Open Latest Report", new IllegalStateException("No generated artifacts are available yet."));
             return;
         }
-        try {
-            Desktop.getDesktop().open(Path.of(currentArtifacts.get(0).path()).toFile());
-        } catch (Exception error) {
-            showError("Open Latest Report", error);
-        }
+        openArtifact(artifact.get(), "Open Latest Report");
     }
 
     private void openActiveReportFolder() {
-        if (snapshot == null || snapshot.activeScan() == null || snapshot.activeScan().safeArtifacts().isEmpty()) {
+        var reportFolder = ReportArtifactSupport.reportFolder(currentArtifacts);
+        if (reportFolder.isEmpty()) {
             showError("Open Report Folder", new IllegalStateException("No active scan artifacts are available yet."));
             return;
         }
-        Path folder = Path.of(snapshot.activeScan().safeArtifacts().get(0).path()).getParent();
         try {
-            Desktop.getDesktop().open(folder.toFile());
+            Desktop.getDesktop().open(reportFolder.get().toFile());
         } catch (Exception error) {
             showError("Open Report Folder", error);
+        }
+    }
+
+    private void announceGeneratedReports(List<ApiModels.Artifact> generatedArtifacts) {
+        List<ApiModels.Artifact> sortedArtifacts = ReportArtifactSupport.sortArtifacts(generatedArtifacts);
+        appendConsole("Generated " + sortedArtifacts.size() + " report artifacts for scan " + snapshot.activeScan().scanId());
+        appendConsole(ReportArtifactSupport.savedSummary(sortedArtifacts));
+        selectArtifact(sortedArtifacts);
+        ReportArtifactSupport.preferredOpenArtifact(sortedArtifacts).ifPresent(artifact -> openArtifact(artifact, "Open Generated Report"));
+
+        Alert success = new Alert(Alert.AlertType.INFORMATION);
+        success.initOwner(stage);
+        success.setTitle("Reports Generated");
+        success.setHeaderText("Report generation completed");
+        success.setContentText(ReportArtifactSupport.savedSummary(sortedArtifacts));
+        success.showAndWait();
+    }
+
+    private void selectArtifact(List<ApiModels.Artifact> generatedArtifacts) {
+        var preferred = ReportArtifactSupport.preferredOpenArtifact(generatedArtifacts);
+        if (preferred.isEmpty()) {
+            return;
+        }
+        String preferredPath = preferred.get().path();
+        for (ApiModels.Artifact artifact : artifactsList.getItems()) {
+            if (artifact != null && preferredPath.equals(artifact.path())) {
+                artifactsList.getSelectionModel().select(artifact);
+                artifactsList.scrollTo(artifact);
+                return;
+            }
         }
     }
 
@@ -746,7 +757,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         ApiModels.ScanResult activeScan = latest.activeScan();
         currentFindings = activeScan != null ? activeScan.safeFindings() : List.of();
         currentDependencies = activeScan != null && activeScan.dependencyGraph() != null ? activeScan.dependencyGraph().safeNodes() : List.of();
-        currentArtifacts = activeScan != null ? activeScan.safeArtifacts() : List.of();
+        currentArtifacts = activeScan != null ? ReportArtifactSupport.sortArtifacts(activeScan.safeArtifacts()) : List.of();
         currentPlugins = latest.plugins();
         rebuildReportProfiles(latest.reportProfiles());
         applyFindingFilter();
@@ -784,16 +795,23 @@ public final class JavaFxWorkbenchLauncher extends Application {
         }
 
         if (!currentArtifacts.isEmpty()) {
-            Path reportFolder = Path.of(currentArtifacts.get(0).path()).getParent();
-            String latestArtifactName = Path.of(currentArtifacts.get(0).path()).getFileName().toString();
+            String latestArtifactName = ReportArtifactSupport.preferredOpenArtifact(currentArtifacts)
+                    .map(ReportArtifactSupport::displayName)
+                    .orElse("none");
             if (reportFolderLabel != null) {
-                reportFolderLabel.setText("Report folder: " + reportFolder);
+                reportFolderLabel.setText("Report folder: " + ReportArtifactSupport.reportFolder(currentArtifacts).map(Path::toString).orElse("unavailable"));
             }
             if (latestArtifactLabel != null) {
                 latestArtifactLabel.setText("Latest artifact: " + latestArtifactName);
             }
+            if (generatedReportsLabel != null) {
+                generatedReportsLabel.setText(
+                        "Generated reports: " + ReportArtifactSupport.generatedReportCount(currentArtifacts)
+                                + " | Supporting artifacts: " + ReportArtifactSupport.supportingArtifactCount(currentArtifacts)
+                );
+            }
             if (reportsFolderStatusLabel != null) {
-                reportsFolderStatusLabel.setText("Reports: " + reportFolder);
+                reportsFolderStatusLabel.setText("Reports: " + ReportArtifactSupport.reportFolder(currentArtifacts).map(Path::toString).orElse("unavailable"));
             }
         } else {
             if (reportFolderLabel != null) {
@@ -801,6 +819,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
             }
             if (latestArtifactLabel != null) {
                 latestArtifactLabel.setText("Latest artifact: none");
+            }
+            if (generatedReportsLabel != null) {
+                generatedReportsLabel.setText("Generated reports: --");
             }
             if (reportsFolderStatusLabel != null) {
                 reportsFolderStatusLabel.setText("Reports: unavailable");
@@ -814,7 +835,11 @@ public final class JavaFxWorkbenchLauncher extends Application {
             dependenciesList.getSelectionModel().select(0);
         }
         if (!currentArtifacts.isEmpty()) {
-            artifactsList.getSelectionModel().select(0);
+            ReportArtifactSupport.preferredOpenArtifact(currentArtifacts)
+                    .ifPresentOrElse(
+                            artifact -> artifactsList.getSelectionModel().select(artifact),
+                            () -> artifactsList.getSelectionModel().select(0)
+                    );
         } else {
             reportPreviewArea.setText("No report artifacts are attached to the active scan yet.");
         }
@@ -1030,8 +1055,5 @@ public final class JavaFxWorkbenchLauncher extends Application {
             return "Repository: none";
         }
         return "Repository: " + repository;
-    }
-
-    private record ReportGenerationSelection(List<String> profileIds, boolean includePlusVariants) {
     }
 }

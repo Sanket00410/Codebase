@@ -50,11 +50,15 @@ public final class WorkbenchText {
             return "Select a generated report or supporting artifact to inspect it here.";
         }
         StringJoiner joiner = new StringJoiner(System.lineSeparator());
+        joiner.add("Saved File: " + ReportArtifactSupport.displayName(artifact));
         joiner.add("Label: " + safe(artifact.label()));
         joiner.add("Kind: " + safe(artifact.kind()));
         joiner.add("Profile: " + safe(artifact.profileId()));
         joiner.add("Media Type: " + safe(artifact.mediaType()));
         joiner.add("Path: " + safe(artifact.path()));
+        ReportArtifactSupport.artifactPath(artifact)
+                .map(Path::getParent)
+                .ifPresent(folder -> joiner.add("Saved Folder: " + folder));
         joiner.add("");
         joiner.add(safe(artifact.description()));
         return joiner.toString();

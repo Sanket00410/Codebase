@@ -46,10 +46,17 @@ public final class DesktopApplicationService {
         return snapshot.withActiveScan(result);
     }
 
-    public List<ApiModels.Artifact> generateReports(String scanId, List<String> profileIds, boolean includePlusVariants)
-            throws IOException, InterruptedException {
+    public ReportGenerationOutcome generateReports(
+            String scanId,
+            List<String> profileIds,
+            boolean includePlusVariants,
+            Path selectedRepository
+    ) throws IOException, InterruptedException {
         runtimeController.ensureBackendRunning();
-        return backendClient.generateReports(scanId, profileIds, includePlusVariants);
+        List<ApiModels.Artifact> generatedArtifacts = backendClient.generateReports(scanId, profileIds, includePlusVariants);
+        DesktopSnapshot snapshot = refresh(selectedRepository);
+        ApiModels.ScanResult refreshedScan = backendClient.getScan(scanId);
+        return new ReportGenerationOutcome(generatedArtifacts, snapshot.withActiveScan(refreshedScan));
     }
 
     public void installTool(String toolName) throws IOException, InterruptedException {
@@ -109,5 +116,11 @@ public final class DesktopApplicationService {
                     reportProfiles
             );
         }
+    }
+
+    public record ReportGenerationOutcome(
+            List<ApiModels.Artifact> generatedArtifacts,
+            DesktopSnapshot snapshot
+    ) {
     }
 }

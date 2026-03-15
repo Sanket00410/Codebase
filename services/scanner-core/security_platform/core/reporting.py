@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Any
 from xml.dom import minidom
 from xml.etree import ElementTree as ET
@@ -174,14 +175,23 @@ def generate_reports(
     requested_profiles: list[str] | None = None,
     include_plus_variants: bool = False,
 ) -> list[ReportArtifact]:
-    output_dir = settings.reports_dir / scan_result.scan_id
-    output_dir.mkdir(parents=True, exist_ok=True)
+    generated_at = datetime.now(timezone.utc)
+    target_name = _report_target_name(scan_result.repository_path)
+    output_dir = _allocate_report_output_dir(generated_at, target_name)
+    bundle_name = output_dir.name
 
     artifacts: list[ReportArtifact] = []
     for profile_id in resolve_report_profile_ids(requested_profiles, include_plus_variants=include_plus_variants):
         profile = _profile_spec(profile_id)
-        document = _build_report_document(scan_result, profile)
-        path = output_dir / f"{profile.id}.{profile.extension}"
+        document = _build_report_document(
+            scan_result,
+            profile,
+            generated_at=generated_at,
+            target_name=target_name,
+            bundle_name=bundle_name,
+            output_dir=output_dir,
+        )
+        path = output_dir / f"{bundle_name}-{profile.id}.{profile.extension}"
 
         if profile.renderer == "html":
             path.write_text(_to_html(document, profile), encoding="utf-8")
@@ -204,12 +214,49 @@ def generate_reports(
                 path=str(path),
                 media_type=profile.media_type,
                 profile_id=profile.id,
-                label=profile.label,
-                description=profile.description,
+                label=_report_artifact_label(profile, target_name, generated_at),
+                description=(
+                    f"{profile.description} Saved as {path.name} in {output_dir}."
+                ),
             )
         )
 
     return artifacts
+
+
+def _report_target_name(repository_path: str | None) -> str:
+    if not repository_path:
+        return "repository"
+    try:
+        candidate = Path(repository_path).expanduser()
+        name = candidate.name or candidate.stem
+    except OSError:
+        name = repository_path
+    normalized = (name or "repository").strip()
+    return normalized or "repository"
+
+
+def _sanitize_target_name(target_name: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", target_name.strip())
+    sanitized = re.sub(r"-{2,}", "-", sanitized).strip("-._")
+    return sanitized or "repository"
+
+
+def _allocate_report_output_dir(generated_at: datetime, target_name: str) -> Path:
+    timestamp = generated_at.astimezone().strftime("%Y%m%d-%H%M%S")
+    base_name = f"{timestamp}-{_sanitize_target_name(target_name)}"
+    output_dir = settings.reports_dir / base_name
+    counter = 2
+    while output_dir.exists():
+        output_dir = settings.reports_dir / f"{base_name}-{counter}"
+        counter += 1
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def _report_artifact_label(profile: ReportProfileSpec, target_name: str, generated_at: datetime) -> str:
+    label_timestamp = generated_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    return f"{profile.label} | {target_name} | {label_timestamp}"
 
 
 def _normalize_profile_id(value: str | None) -> str | None:
@@ -257,7 +304,15 @@ def _profile_spec(profile_id: str) -> ReportProfileSpec:
     raise ValueError(f"Unknown report profile: {profile_id}")
 
 
-def _build_report_document(scan_result: ScanResult, profile: ReportProfileSpec) -> dict[str, Any]:
+def _build_report_document(
+    scan_result: ScanResult,
+    profile: ReportProfileSpec,
+    *,
+    generated_at: datetime,
+    target_name: str,
+    bundle_name: str,
+    output_dir: Path,
+) -> dict[str, Any]:
     include_rich_evidence = profile.includes_rich_evidence
     findings = [_serialize_finding(scan_result, finding, include_rich_evidence) for finding in scan_result.findings]
     raw_artifacts = [
@@ -280,14 +335,19 @@ def _build_report_document(scan_result: ScanResult, profile: ReportProfileSpec) 
             "renderer": profile.renderer,
             "includes_rich_evidence": include_rich_evidence,
         },
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": generated_at.isoformat(),
         "scan": {
             "scan_id": scan_result.scan_id,
             "status": scan_result.status.value,
             "repository_path": scan_result.repository_path,
+            "target_name": target_name,
             "started_at": scan_result.started_at,
             "completed_at": scan_result.completed_at,
             "duration_seconds": _duration_seconds(scan_result),
+        },
+        "report_bundle": {
+            "name": bundle_name,
+            "output_dir": str(output_dir),
         },
         "summary": {
             "security_score": scan_result.summary.score,
