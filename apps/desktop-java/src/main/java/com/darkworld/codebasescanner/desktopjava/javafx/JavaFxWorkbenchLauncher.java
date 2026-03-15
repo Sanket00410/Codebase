@@ -2,6 +2,7 @@ package com.darkworld.codebasescanner.desktopjava.javafx;
 
 import com.darkworld.codebasescanner.desktopjava.core.ApiModels;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopApplicationService;
+import com.darkworld.codebasescanner.desktopjava.core.DesktopBranding;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopPaths;
 import com.darkworld.codebasescanner.desktopjava.core.LocalFilePreviewer;
 import com.darkworld.codebasescanner.desktopjava.core.WorkbenchText;
@@ -10,6 +11,7 @@ import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -42,7 +44,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 
 import java.awt.Desktop;
 import java.nio.file.Path;
@@ -94,7 +98,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private CheckBox includePlusVariantsCheck;
 
     private DesktopApplicationService.DesktopSnapshot snapshot;
-    private Path selectedRepository = repositoryRoot;
+    private Path selectedRepository = DesktopPaths.looksLikeRepositoryRoot(repositoryRoot) ? repositoryRoot : null;
     private List<ApiModels.Finding> currentFindings = List.of();
     private List<ApiModels.DependencyNode> currentDependencies = List.of();
     private List<ApiModels.Artifact> currentArtifacts = List.of();
@@ -133,10 +137,19 @@ public final class JavaFxWorkbenchLauncher extends Application {
         root.setCenter(buildWorkspace());
         root.setBottom(buildStatusBar());
 
-        Scene scene = new Scene(root, 1620, 980);
+        Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
+        double width = Math.min(1460, Math.max(1180, bounds.getWidth() - 56));
+        double height = Math.min(920, Math.max(760, bounds.getHeight() - 72));
+
+        Scene scene = new Scene(root, width, height);
         scene.getStylesheets().add(getClass().getResource("/com/darkworld/codebasescanner/desktopjava/javafx/workbench.css").toExternalForm());
         primaryStage.setTitle("Code Base Scanner - JavaFX Workbench");
+        primaryStage.getIcons().setAll(DesktopBranding.loadFxIcon());
         primaryStage.setScene(scene);
+        primaryStage.setMinWidth(Math.min(width, 1160));
+        primaryStage.setMinHeight(Math.min(height, 740));
+        primaryStage.setOnCloseRequest(this::handleCloseRequest);
+        primaryStage.centerOnScreen();
         primaryStage.show();
 
         loadInitialState();
@@ -197,7 +210,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         titleBox.getStyleClass().add("title-box");
         Label title = new Label("Code Base Scanner");
         title.getStyleClass().add("header-title");
-        repositoryLabel = new Label("Repository: " + selectedRepository);
+        repositoryLabel = new Label(repositorySummaryText(selectedRepository));
         repositoryLabel.getStyleClass().add("header-subtitle");
         backendStatusLabel = new Label("Backend starting...");
         backendStatusLabel.getStyleClass().addAll("status-pill", "status-pill-pending");
@@ -495,7 +508,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         HBox bar = new HBox(16);
         bar.getStyleClass().add("status-bar");
         bar.setPadding(new Insets(8, 12, 10, 12));
-        repositoryStatusLabel = new Label("Repository: " + selectedRepository);
+        repositoryStatusLabel = new Label(repositoryStatusText(selectedRepository));
         backendStateStatusLabel = new Label("Backend: starting");
         activeScanStatusLabel = new Label("Active scan: none");
         statusFindingsValueLabel = new Label("Findings: --");
@@ -645,12 +658,17 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private void chooseRepository() {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setInitialDirectory(selectedRepository != null ? selectedRepository.toFile() : repositoryRoot.toFile());
+        Path initialDirectory = selectedRepository != null
+                ? selectedRepository
+                : DesktopPaths.looksLikeRepositoryRoot(repositoryRoot)
+                ? repositoryRoot
+                : Path.of(System.getProperty("user.home"));
+        chooser.setInitialDirectory(initialDirectory.toFile());
         chooser.setTitle("Choose repository to scan");
         var selected = chooser.showDialog(stage);
         if (selected != null) {
             selectedRepository = selected.toPath().toAbsolutePath().normalize();
-            repositoryLabel.setText("Repository: " + selectedRepository);
+            repositoryLabel.setText(repositorySummaryText(selectedRepository));
             appendConsole("Repository selected: " + selectedRepository);
             refreshSnapshot();
         }
@@ -712,9 +730,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
         backendStatusLabel.getStyleClass().removeAll("status-pill-live", "status-pill-pending");
         backendStatusLabel.getStyleClass().add(latest.backendReady() ? "status-pill-live" : "status-pill-pending");
-        repositoryLabel.setText("Repository: " + latest.selectedRepository());
+        repositoryLabel.setText(repositorySummaryText(selectedRepository != null ? selectedRepository : latest.selectedRepository()));
         if (repositoryStatusLabel != null) {
-            repositoryStatusLabel.setText("Repository: " + latest.selectedRepository());
+            repositoryStatusLabel.setText(repositoryStatusText(selectedRepository != null ? selectedRepository : latest.selectedRepository()));
         }
         if (backendStateStatusLabel != null) {
             backendStateStatusLabel.setText(latest.backendReady() ? "Backend: ready" : "Backend: unavailable");
@@ -981,6 +999,37 @@ public final class JavaFxWorkbenchLauncher extends Application {
         Label label = new Label(text);
         label.getStyleClass().add("section-label");
         return label;
+    }
+
+    private void handleCloseRequest(WindowEvent event) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.initOwner(stage);
+        confirm.setTitle("Close Code Base Scanner");
+        confirm.setHeaderText("Close the workbench?");
+        confirm.setContentText(
+                "Scan history, generated reports, and runtime settings are saved automatically. "
+                        + "No separate project save is required."
+        );
+        ButtonType closeButton = new ButtonType("Close", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+        confirm.getButtonTypes().setAll(closeButton, cancelButton);
+        if (confirm.showAndWait().orElse(cancelButton) != closeButton) {
+            event.consume();
+        }
+    }
+
+    private String repositorySummaryText(Path repository) {
+        if (repository == null) {
+            return "Repository: no repository selected";
+        }
+        return "Repository: " + repository;
+    }
+
+    private String repositoryStatusText(Path repository) {
+        if (repository == null) {
+            return "Repository: none";
+        }
+        return "Repository: " + repository;
     }
 
     private record ReportGenerationSelection(List<String> profileIds, boolean includePlusVariants) {

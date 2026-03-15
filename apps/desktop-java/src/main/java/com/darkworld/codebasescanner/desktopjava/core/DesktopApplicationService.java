@@ -31,7 +31,7 @@ public final class DesktopApplicationService {
         return new DesktopSnapshot(
                 true,
                 repositoryRoot,
-                selectedRepository != null ? selectedRepository : repositoryRoot,
+                selectedRepository,
                 activeScan,
                 scans,
                 plugins.stream().sorted(Comparator.comparing(plugin -> plugin.metadata().displayName())).toList(),

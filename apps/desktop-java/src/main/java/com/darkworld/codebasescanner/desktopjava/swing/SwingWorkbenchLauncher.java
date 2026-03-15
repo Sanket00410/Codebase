@@ -2,6 +2,7 @@ package com.darkworld.codebasescanner.desktopjava.swing;
 
 import com.darkworld.codebasescanner.desktopjava.core.ApiModels;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopApplicationService;
+import com.darkworld.codebasescanner.desktopjava.core.DesktopBranding;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopPaths;
 import com.darkworld.codebasescanner.desktopjava.core.LocalFilePreviewer;
 import com.darkworld.codebasescanner.desktopjava.core.WorkbenchText;
@@ -41,6 +42,8 @@ import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -79,7 +82,7 @@ public final class SwingWorkbenchLauncher {
     private DefaultTableModel pluginsModel;
 
     private DesktopApplicationService.DesktopSnapshot snapshot;
-    private Path selectedRepository = repositoryRoot;
+    private Path selectedRepository = DesktopPaths.looksLikeRepositoryRoot(repositoryRoot) ? repositoryRoot : null;
     private List<ApiModels.Finding> currentFindings = List.of();
     private List<ApiModels.DependencyNode> currentDependencies = List.of();
     private List<ApiModels.Artifact> currentArtifacts = List.of();
@@ -113,14 +116,25 @@ public final class SwingWorkbenchLauncher {
 
     private void show() {
         frame = new JFrame("Code Base Scanner - Swing Workbench");
-        frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        frame.setMinimumSize(new Dimension(1360, 860));
-        frame.setPreferredSize(new Dimension(1600, 980));
+        frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+        frame.setIconImages(DesktopBranding.loadAwtIcons());
+        Rectangle bounds = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        int width = (int) Math.min(1460, Math.max(1160, bounds.getWidth() - 48));
+        int height = (int) Math.min(920, Math.max(760, bounds.getHeight() - 56));
+        frame.setMinimumSize(new Dimension(Math.min(width, 1160), Math.min(height, 740)));
+        frame.setPreferredSize(new Dimension(width, height));
         frame.setJMenuBar(buildMenuBar());
         frame.add(buildTopShell(), BorderLayout.NORTH);
         frame.add(buildWorkspace(), BorderLayout.CENTER);
         frame.add(buildStatusBar(), BorderLayout.SOUTH);
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                if (confirmClose()) {
+                    frame.dispose();
+                }
+            }
+
             @Override
             public void windowClosed(java.awt.event.WindowEvent e) {
                 service.shutdown();
@@ -182,7 +196,7 @@ public final class SwingWorkbenchLauncher {
         JLabel title = new JLabel("Code Base Scanner");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 24f));
         backendStatusLabel = new JLabel("Backend starting...");
-        repositoryLabel = new JLabel("Repository: " + selectedRepository);
+        repositoryLabel = new JLabel(repositorySummaryText(selectedRepository));
         titlePanel.add(title, BorderLayout.NORTH);
         titlePanel.add(repositoryLabel, BorderLayout.CENTER);
         titlePanel.add(backendStatusLabel, BorderLayout.EAST);
@@ -436,13 +450,18 @@ public final class SwingWorkbenchLauncher {
     }
 
     private void chooseRepository() {
-        JFileChooser chooser = new JFileChooser(selectedRepository != null ? selectedRepository.toFile() : repositoryRoot.toFile());
+        Path initialDirectory = selectedRepository != null
+                ? selectedRepository
+                : DesktopPaths.looksLikeRepositoryRoot(repositoryRoot)
+                ? repositoryRoot
+                : Path.of(System.getProperty("user.home"));
+        JFileChooser chooser = new JFileChooser(initialDirectory.toFile());
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setDialogTitle("Choose repository to scan");
         if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) {
             File selected = chooser.getSelectedFile();
             selectedRepository = selected.toPath().toAbsolutePath().normalize();
-            repositoryLabel.setText("Repository: " + selectedRepository);
+            repositoryLabel.setText(repositorySummaryText(selectedRepository));
             appendConsole("Repository selected: " + selectedRepository);
             refreshSnapshot();
         }
@@ -477,7 +496,7 @@ public final class SwingWorkbenchLauncher {
 
     private void applySnapshot(DesktopApplicationService.DesktopSnapshot latest) {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
-        repositoryLabel.setText("Repository: " + latest.selectedRepository());
+        repositoryLabel.setText(repositorySummaryText(selectedRepository != null ? selectedRepository : latest.selectedRepository()));
         overviewArea.setText(WorkbenchText.formatRepositorySummary(latest.selectedRepository(), latest.activeScan())
                 + System.lineSeparator() + System.lineSeparator()
                 + WorkbenchText.formatScanOverview(latest.activeScan()));
@@ -708,5 +727,26 @@ public final class SwingWorkbenchLauncher {
     private void showError(String activity, Exception error) {
         appendConsole(activity + " failed: " + error.getMessage());
         JOptionPane.showMessageDialog(frame, error.getMessage(), activity, JOptionPane.ERROR_MESSAGE);
+    }
+
+    private boolean confirmClose() {
+        int choice = JOptionPane.showOptionDialog(
+                frame,
+                "Close Code Base Scanner?\n\nScan history, generated reports, and runtime settings are saved automatically.\nNo separate project save is required.",
+                "Close Code Base Scanner",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                new Object[]{"Close", "Cancel"},
+                "Cancel"
+        );
+        return choice == JOptionPane.OK_OPTION;
+    }
+
+    private String repositorySummaryText(Path repository) {
+        if (repository == null) {
+            return "Repository: no repository selected";
+        }
+        return "Repository: " + repository;
     }
 }

@@ -70,6 +70,9 @@ public final class LocalFilePreviewer {
         if (candidate.isAbsolute()) {
             return candidate.normalize();
         }
+        if (repositoryRoot == null) {
+            return candidate.toAbsolutePath().normalize();
+        }
         return repositoryRoot.resolve(candidate).normalize();
     }
 }

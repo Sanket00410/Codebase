@@ -43,6 +43,7 @@ val installLibDir = layout.buildDirectory.dir("install/${project.name}/lib")
 val packageRootDir = layout.buildDirectory.dir("jpackage")
 val packagedBackendDir = installLibDir.map { it.dir("backend") }
 val backendSourceDir = projectDir.resolveSibling("desktop").resolve("src-tauri").resolve("backend")
+val windowsIconFile = projectDir.resolve("branding").resolve("code-base-scanner.ico")
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
@@ -115,6 +116,7 @@ tasks.register<Exec>("packageSwingAppImage") {
             "--input", installLibDir.get().asFile.absolutePath,
             "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
             "--main-class", "com.darkworld.codebasescanner.desktopjava.swing.SwingWorkbenchLauncher",
+            "--icon", windowsIconFile.absolutePath,
             "--java-options", "-Dfile.encoding=UTF-8",
             "--java-options", "-Dcode.base.scanner.app.dir=\$APPDIR"
         )
@@ -140,6 +142,7 @@ tasks.register<Exec>("packageJavaFxAppImage") {
             "--input", installLibDir.get().asFile.absolutePath,
             "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
             "--main-class", "com.darkworld.codebasescanner.desktopjava.javafx.JavaFxWorkbenchLauncher",
+            "--icon", windowsIconFile.absolutePath,
             "--java-options", "-Dfile.encoding=UTF-8",
             "--java-options", "-Dcode.base.scanner.app.dir=\$APPDIR",
             "--java-options", "--module-path",
@@ -201,6 +204,7 @@ fun configureWindowsInstallerTask(
             "--input", installLibDir.get().asFile.absolutePath,
             "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
             "--main-class", mainClassName,
+            "--icon", windowsIconFile.absolutePath,
             "--java-options", "-Dfile.encoding=UTF-8",
             "--java-options", "-Dcode.base.scanner.app.dir=\$APPDIR"
         )

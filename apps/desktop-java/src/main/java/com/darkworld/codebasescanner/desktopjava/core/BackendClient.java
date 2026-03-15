@@ -8,11 +8,12 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.HttpURLConnection;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -30,14 +31,10 @@ public final class BackendClient {
     );
 
     private final String apiRoot;
-    private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
     public BackendClient(String apiRoot) {
         this.apiRoot = apiRoot.endsWith("/") ? apiRoot.substring(0, apiRoot.length() - 1) : apiRoot;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(3))
-                .build();
         this.objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
@@ -114,23 +111,38 @@ public final class BackendClient {
 
     private <T> T request(String path, String method, Object body, TypeReference<T> typeReference)
             throws IOException, InterruptedException {
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(apiRoot + path))
-                .timeout(Duration.ofMinutes(5))
-                .header("Accept", "application/json");
+        HttpURLConnection connection = (HttpURLConnection) URI.create(apiRoot + path).toURL().openConnection();
+        try {
+            connection.setRequestMethod(method);
+            connection.setConnectTimeout((int) Duration.ofSeconds(3).toMillis());
+            connection.setReadTimeout((int) Duration.ofMinutes(5).toMillis());
+            connection.setRequestProperty("Accept", "application/json");
 
-        if (body != null) {
-            requestBuilder.header("Content-Type", "application/json");
-            requestBuilder.method(method, HttpRequest.BodyPublishers.ofString(serialize(body)));
-        } else {
-            requestBuilder.method(method, HttpRequest.BodyPublishers.noBody());
-        }
+            if (body != null) {
+                byte[] payload = serialize(body).getBytes(StandardCharsets.UTF_8);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json");
+                connection.setRequestProperty("Content-Length", Integer.toString(payload.length));
+                try (OutputStream outputStream = connection.getOutputStream()) {
+                    outputStream.write(payload);
+                }
+            }
 
-        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("Backend request failed: " + response.statusCode() + " " + response.body());
+            int statusCode = connection.getResponseCode();
+            try (InputStream responseStream = statusCode >= 200 && statusCode < 300
+                    ? connection.getInputStream()
+                    : connection.getErrorStream()) {
+                String bodyText = responseStream == null
+                        ? ""
+                        : new String(responseStream.readAllBytes(), StandardCharsets.UTF_8);
+                if (statusCode < 200 || statusCode >= 300) {
+                    throw new IOException("Backend request failed: " + statusCode + " " + bodyText);
+                }
+                return objectMapper.readValue(bodyText, typeReference);
+            }
+        } finally {
+            connection.disconnect();
         }
-        return objectMapper.readValue(response.body(), typeReference);
     }
 
     private String serialize(Object body) throws JsonProcessingException {
