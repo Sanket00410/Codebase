@@ -101,6 +101,21 @@ public final class DesktopRuntimeController {
             );
         }
 
+        List<Path> packagedCandidates = new ArrayList<>();
+        DesktopPaths.resolvePackagedAppDir().ifPresent(appDir -> {
+            packagedCandidates.add(appDir.resolve("backend").resolve(isWindows() ? "security-platform-backend.exe" : "security-platform-backend"));
+            packagedCandidates.add(appDir.resolve("lib").resolve("backend").resolve(isWindows() ? "security-platform-backend.exe" : "security-platform-backend"));
+        });
+
+        for (Path packagedBackend : packagedCandidates) {
+            if (Files.exists(packagedBackend)) {
+                return new BackendLaunch(
+                        List.of(packagedBackend.toString(), "serve", "--host", HOST, "--port", Integer.toString(PORT)),
+                        packagedBackend.getParent()
+                );
+            }
+        }
+
         Path packagedBackend = repositoryRoot
                 .resolve("apps")
                 .resolve("desktop")

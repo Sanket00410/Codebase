@@ -41,10 +41,21 @@ application {
 
 val installLibDir = layout.buildDirectory.dir("install/${project.name}/lib")
 val packageRootDir = layout.buildDirectory.dir("jpackage")
+val packagedBackendDir = installLibDir.map { it.dir("backend") }
+val backendSourceDir = projectDir.resolveSibling("desktop").resolve("src-tauri").resolve("backend")
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(21)
+}
+
+tasks.register<Copy>("syncPackagedBackend") {
+    group = "distribution"
+    description = "Copy the packaged backend runtime into the Java desktop distribution input."
+    from(backendSourceDir)
+    include("security-platform-backend.exe", "security-platform-backend", "README.md")
+    into(packagedBackendDir)
+    mustRunAfter("installDist")
 }
 
 tasks.register<JavaExec>("runSwing") {
@@ -88,7 +99,7 @@ tasks.register<JavaExec>("smokeTestJavaFx") {
 tasks.register<Exec>("packageSwingAppImage") {
     group = "distribution"
     description = "Package the Swing rewrite path as a jpackage app-image."
-    dependsOn("installDist")
+    dependsOn("installDist", "syncPackagedBackend")
     doFirst {
         val javaHome = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
         val jpackageName = if (currentOs.isWindows) "jpackage.exe" else "jpackage"
@@ -104,7 +115,8 @@ tasks.register<Exec>("packageSwingAppImage") {
             "--input", installLibDir.get().asFile.absolutePath,
             "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
             "--main-class", "com.darkworld.codebasescanner.desktopjava.swing.SwingWorkbenchLauncher",
-            "--java-options", "-Dfile.encoding=UTF-8"
+            "--java-options", "-Dfile.encoding=UTF-8",
+            "--java-options", "-Dcode.base.scanner.app.dir=\$APPDIR"
         )
     }
 }
@@ -112,7 +124,7 @@ tasks.register<Exec>("packageSwingAppImage") {
 tasks.register<Exec>("packageJavaFxAppImage") {
     group = "distribution"
     description = "Package the JavaFX rewrite path as a jpackage app-image."
-    dependsOn("installDist")
+    dependsOn("installDist", "syncPackagedBackend")
     doFirst {
         val javaHome = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
         val jpackageName = if (currentOs.isWindows) "jpackage.exe" else "jpackage"
@@ -129,8 +141,9 @@ tasks.register<Exec>("packageJavaFxAppImage") {
             "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
             "--main-class", "com.darkworld.codebasescanner.desktopjava.javafx.JavaFxWorkbenchLauncher",
             "--java-options", "-Dfile.encoding=UTF-8",
+            "--java-options", "-Dcode.base.scanner.app.dir=\$APPDIR",
             "--java-options", "--module-path",
-            "--java-options", "\$APPDIR\\lib",
+            "--java-options", "\$APPDIR",
             "--java-options", "--add-modules",
             "--java-options", "javafx.controls,javafx.graphics,javafx.base"
         )
@@ -167,7 +180,7 @@ fun configureWindowsInstallerTask(
 ) = tasks.register<Exec>(taskName) {
     group = "distribution"
     description = taskDescription
-    dependsOn("installDist")
+    dependsOn("installDist", "syncPackagedBackend")
     doFirst {
         if (!currentOs.isWindows) {
             throw GradleException("Windows installer packaging is only supported on Windows builders.")
@@ -188,13 +201,14 @@ fun configureWindowsInstallerTask(
             "--input", installLibDir.get().asFile.absolutePath,
             "--main-jar", "code-base-scanner-desktop-java-0.1.0.jar",
             "--main-class", mainClassName,
-            "--java-options", "-Dfile.encoding=UTF-8"
+            "--java-options", "-Dfile.encoding=UTF-8",
+            "--java-options", "-Dcode.base.scanner.app.dir=\$APPDIR"
         )
         if (includeJavaFxModules) {
             command.addAll(
                 listOf(
                     "--java-options", "--module-path",
-                    "--java-options", "\$APPDIR\\lib",
+                    "--java-options", "\$APPDIR",
                     "--java-options", "--add-modules",
                     "--java-options", "javafx.controls,javafx.graphics,javafx.base"
                 )

@@ -36,6 +36,19 @@ public final class DesktopPaths {
                 .orElse(current);
     }
 
+    public static Optional<Path> resolvePackagedAppDir() {
+        List<String> candidates = List.of(
+                System.getProperty("code.base.scanner.app.dir", ""),
+                System.getProperty("jpackage.app-path", "")
+        );
+        return candidates.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> Path.of(value).toAbsolutePath().normalize())
+                .map(path -> Files.isRegularFile(path) ? path.getParent() : path)
+                .filter(Files::exists)
+                .findFirst();
+    }
+
     public static Path resolveJavaRuntimeDir() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         Path basePath;
