@@ -50,8 +50,39 @@ public final class LocalFilePreviewer {
             return "Preview file does not exist: " + previewPath;
         }
 
+        String lowerName = previewPath.getFileName() != null
+                ? previewPath.getFileName().toString().toLowerCase()
+                : "";
+        if (lowerName.endsWith(".pdf")) {
+            return "PDF report preview is opened externally."
+                    + System.lineSeparator() + System.lineSeparator()
+                    + "Saved file: " + previewPath.getFileName()
+                    + System.lineSeparator()
+                    + "Saved folder: " + previewPath.getParent()
+                    + System.lineSeparator() + System.lineSeparator()
+                    + "Use Open Selected or Open Latest Report to open the PDF in your default viewer.";
+        }
+        if (lowerName.endsWith(".html") || lowerName.endsWith(".htm")) {
+            return "HTML report preview is opened externally."
+                    + System.lineSeparator() + System.lineSeparator()
+                    + "Saved file: " + previewPath.getFileName()
+                    + System.lineSeparator()
+                    + "Saved folder: " + previewPath.getParent()
+                    + System.lineSeparator() + System.lineSeparator()
+                    + "Use Open Selected or Open Latest Report to open the rendered report in your browser.";
+        }
+
         try {
             byte[] bytes = Files.readAllBytes(previewPath);
+            if (looksBinary(bytes)) {
+                return "Binary report preview is not shown inline."
+                        + System.lineSeparator() + System.lineSeparator()
+                        + "Saved file: " + previewPath.getFileName()
+                        + System.lineSeparator()
+                        + "Saved folder: " + previewPath.getParent()
+                        + System.lineSeparator() + System.lineSeparator()
+                        + "Use Open Selected to inspect it with the associated desktop application.";
+            }
             int cappedBytes = Math.min(bytes.length, maxBytes);
             String content = new String(bytes, 0, cappedBytes, StandardCharsets.UTF_8).replace('\0', ' ');
             List<String> lines = content.lines().limit(maxLines).toList();
@@ -63,6 +94,22 @@ public final class LocalFilePreviewer {
         } catch (IOException error) {
             return "Unable to read report preview: " + error.getMessage();
         }
+    }
+
+    private static boolean looksBinary(byte[] bytes) {
+        int sampleSize = Math.min(bytes.length, 2048);
+        int controlBytes = 0;
+        for (int index = 0; index < sampleSize; index++) {
+            byte value = bytes[index];
+            if (value == 0) {
+                return true;
+            }
+            int unsigned = value & 0xFF;
+            if (unsigned < 0x09 || (unsigned > 0x0D && unsigned < 0x20)) {
+                controlBytes++;
+            }
+        }
+        return sampleSize > 0 && controlBytes > sampleSize / 8;
     }
 
     public static Path resolveAgainstRepository(Path repositoryRoot, String rawPath) {

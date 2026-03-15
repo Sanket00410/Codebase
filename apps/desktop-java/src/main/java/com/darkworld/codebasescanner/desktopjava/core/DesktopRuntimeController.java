@@ -87,6 +87,7 @@ public final class DesktopRuntimeController {
                 "SCANNER_PLATFORM_HOST", HOST,
                 "SCANNER_PLATFORM_PORT", Integer.toString(PORT),
                 "SCANNER_PLATFORM_DATA_DIR", runtimeDirectory.toString(),
+                "SCANNER_PLATFORM_REPORTS_DIR", DesktopPaths.resolveUserReportsDir().toString(),
                 "SCANNER_PLATFORM_PID_FILE", runtimeDirectory.resolve("backend.pid").toString()
         );
     }

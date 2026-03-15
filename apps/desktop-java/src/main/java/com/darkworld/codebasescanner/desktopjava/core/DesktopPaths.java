@@ -62,6 +62,13 @@ public final class DesktopPaths {
         return Path.of(System.getProperty("user.home")).resolve(".code-base-scanner").resolve("java-runtime");
     }
 
+    public static Path resolveUserReportsDir() {
+        Path home = Path.of(System.getProperty("user.home")).toAbsolutePath().normalize();
+        Path documents = home.resolve("Documents");
+        Path base = Files.exists(documents) ? documents : home;
+        return base.resolve("Code Base Scanner Reports");
+    }
+
     public static boolean looksLikeRepositoryRoot(Path candidate) {
         return Files.exists(candidate.resolve("services").resolve("scanner-core"))
                 && Files.exists(candidate.resolve("apps").resolve("desktop"));

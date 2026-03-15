@@ -6,6 +6,7 @@ import com.darkworld.codebasescanner.desktopjava.core.DesktopBranding;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopPaths;
 import com.darkworld.codebasescanner.desktopjava.core.LocalFilePreviewer;
 import com.darkworld.codebasescanner.desktopjava.core.ReportArtifactSupport;
+import com.darkworld.codebasescanner.desktopjava.core.SystemShellSupport;
 import com.darkworld.codebasescanner.desktopjava.core.WorkbenchText;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -49,7 +50,6 @@ import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 
-import java.awt.Desktop;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -469,12 +469,15 @@ public final class JavaFxWorkbenchLauncher extends Application {
         );
         reportHintLabel.getStyleClass().add("status-line");
         reportHintLabel.setWrapText(true);
-        reportFolderLabel = new Label("Report folder: unavailable");
+        reportFolderLabel = new Label("Reports home: " + DesktopPaths.resolveUserReportsDir());
         reportFolderLabel.getStyleClass().add("status-line");
-        latestArtifactLabel = new Label("Latest artifact: none");
+        latestArtifactLabel = new Label("Latest bundle: none");
         latestArtifactLabel.getStyleClass().add("status-line");
         generatedReportsLabel = new Label("Generated reports: --");
         generatedReportsLabel.getStyleClass().add("status-line");
+        Button selectRecommendedButton = actionButton("Recommended", this::selectRecommendedReportProfiles);
+        Button selectAllButton = actionButton("All Profiles", this::selectAllReportProfiles);
+        FlowPane profileActions = new FlowPane(8, 8, selectRecommendedButton, selectAllButton);
         ScrollPane profilesScroll = new ScrollPane(reportProfilesBox);
         profilesScroll.setFitToWidth(true);
         profilesScroll.setPrefViewportHeight(180);
@@ -491,6 +494,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 10,
                 reportSummary,
                 labeledSection("Report Profiles"),
+                profileActions,
                 includePlusVariantsCheck,
                 profilesScroll,
                 labeledSection("Generated Artifacts"),
@@ -545,7 +549,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
         backendStateStatusLabel = new Label("Backend: starting");
         activeScanStatusLabel = new Label("Active scan: none");
         statusFindingsValueLabel = new Label("Findings: --");
-        reportsFolderStatusLabel = new Label("Reports: unavailable");
+        reportsFolderStatusLabel = new Label("Reports home: " + DesktopPaths.resolveUserReportsDir());
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         bar.getChildren().addAll(
@@ -665,7 +669,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private void openArtifact(ApiModels.Artifact artifact, String activity) {
         try {
-            Desktop.getDesktop().open(Path.of(artifact.path()).toFile());
+            SystemShellSupport.openPath(Path.of(artifact.path()));
         } catch (Exception error) {
             showError(activity, error);
         }
@@ -682,12 +686,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
     private void openActiveReportFolder() {
         var reportFolder = ReportArtifactSupport.reportFolder(currentArtifacts);
-        if (reportFolder.isEmpty()) {
-            showError("Open Report Folder", new IllegalStateException("No active scan artifacts are available yet."));
-            return;
-        }
         try {
-            Desktop.getDesktop().open(reportFolder.get().toFile());
+            SystemShellSupport.openFolder(reportFolder.orElse(DesktopPaths.resolveUserReportsDir()));
         } catch (Exception error) {
             showError("Open Report Folder", error);
         }
@@ -721,6 +721,22 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 return;
             }
         }
+    }
+
+    private void selectAllReportProfiles() {
+        syncReportProfileSelection(snapshot != null
+                ? snapshot.reportProfiles().stream().map(ApiModels.ReportProfileDefinition::id).toList()
+                : List.of());
+    }
+
+    private void selectRecommendedReportProfiles() {
+        syncReportProfileSelection(List.of(
+                "modern-report",
+                "executive-summary",
+                "pdf",
+                "machine-readable-json",
+                "sarif"
+        ));
     }
 
     private void loadLatestScan() {
@@ -798,11 +814,14 @@ public final class JavaFxWorkbenchLauncher extends Application {
             String latestArtifactName = ReportArtifactSupport.preferredOpenArtifact(currentArtifacts)
                     .map(ReportArtifactSupport::displayName)
                     .orElse("none");
+            String latestBundle = ReportArtifactSupport.reportFolder(currentArtifacts)
+                    .map(path -> path.getFileName() != null ? path.getFileName().toString() : path.toString())
+                    .orElse("none");
             if (reportFolderLabel != null) {
-                reportFolderLabel.setText("Report folder: " + ReportArtifactSupport.reportFolder(currentArtifacts).map(Path::toString).orElse("unavailable"));
+                reportFolderLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
             }
             if (latestArtifactLabel != null) {
-                latestArtifactLabel.setText("Latest artifact: " + latestArtifactName);
+                latestArtifactLabel.setText("Latest bundle: " + latestBundle + " | Latest report: " + latestArtifactName);
             }
             if (generatedReportsLabel != null) {
                 generatedReportsLabel.setText(
@@ -811,20 +830,20 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 );
             }
             if (reportsFolderStatusLabel != null) {
-                reportsFolderStatusLabel.setText("Reports: " + ReportArtifactSupport.reportFolder(currentArtifacts).map(Path::toString).orElse("unavailable"));
+                reportsFolderStatusLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
             }
         } else {
             if (reportFolderLabel != null) {
-                reportFolderLabel.setText("Report folder: unavailable");
+                reportFolderLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
             }
             if (latestArtifactLabel != null) {
-                latestArtifactLabel.setText("Latest artifact: none");
+                latestArtifactLabel.setText("Latest bundle: none");
             }
             if (generatedReportsLabel != null) {
                 generatedReportsLabel.setText("Generated reports: --");
             }
             if (reportsFolderStatusLabel != null) {
-                reportsFolderStatusLabel.setText("Reports: unavailable");
+                reportsFolderStatusLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
             }
         }
 

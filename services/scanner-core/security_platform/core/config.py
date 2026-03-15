@@ -63,6 +63,9 @@ class Settings:
 
     @property
     def reports_dir(self) -> Path:
+        override = os.getenv("SCANNER_PLATFORM_REPORTS_DIR")
+        if override:
+            return Path(override).expanduser().resolve()
         return self.data_dir / "reports"
 
     @property

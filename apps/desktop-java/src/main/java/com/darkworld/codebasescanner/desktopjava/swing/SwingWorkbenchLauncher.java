@@ -6,6 +6,7 @@ import com.darkworld.codebasescanner.desktopjava.core.DesktopBranding;
 import com.darkworld.codebasescanner.desktopjava.core.DesktopPaths;
 import com.darkworld.codebasescanner.desktopjava.core.LocalFilePreviewer;
 import com.darkworld.codebasescanner.desktopjava.core.ReportArtifactSupport;
+import com.darkworld.codebasescanner.desktopjava.core.SystemShellSupport;
 import com.darkworld.codebasescanner.desktopjava.core.WorkbenchText;
 import com.formdev.flatlaf.FlatDarkLaf;
 
@@ -42,7 +43,6 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -354,9 +354,12 @@ public final class SwingWorkbenchLauncher {
         reportProfilesPanel.setLayout(new BoxLayout(reportProfilesPanel, BoxLayout.Y_AXIS));
         JScrollPane profilesScroll = new JScrollPane(reportProfilesPanel);
         profilesScroll.setPreferredSize(new Dimension(320, 170));
+        JPanel profileActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        profileActions.add(makeToolbarButton("Recommended", this::selectRecommendedReportProfiles));
+        profileActions.add(makeToolbarButton("All Profiles", this::selectAllReportProfiles));
 
-        reportFolderStatusLabel = new JLabel("Report folder: unavailable");
-        latestArtifactStatusLabel = new JLabel("Latest artifact: none");
+        reportFolderStatusLabel = new JLabel("Reports home: " + DesktopPaths.resolveUserReportsDir());
+        latestArtifactStatusLabel = new JLabel("Latest bundle: none");
         generatedReportsStatusLabel = new JLabel("Generated reports: --");
 
         JPanel reportSummaryPanel = new JPanel(new GridLayout(0, 1, 0, 6));
@@ -368,7 +371,7 @@ public final class SwingWorkbenchLauncher {
 
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
-                createReportLeftColumn(reportSummaryPanel, profilesScroll, new JScrollPane(artifactsList)),
+                createReportLeftColumn(reportSummaryPanel, profileActions, profilesScroll, new JScrollPane(artifactsList)),
                 createSectionPanel("Preview", new JScrollPane(reportPreviewArea))
         );
         splitPane.setResizeWeight(0.4);
@@ -542,20 +545,15 @@ public final class SwingWorkbenchLauncher {
 
     private void openArtifact(ApiModels.Artifact artifact, String activity) {
         try {
-            Desktop.getDesktop().open(Path.of(artifact.path()).toFile());
+            SystemShellSupport.openPath(Path.of(artifact.path()));
         } catch (Exception error) {
             showError(activity, error);
         }
     }
 
     private void openActiveReportFolder() {
-        var folder = ReportArtifactSupport.reportFolder(currentArtifacts);
-        if (folder.isEmpty()) {
-            JOptionPane.showMessageDialog(frame, "No active report folder is available yet.");
-            return;
-        }
         try {
-            Desktop.getDesktop().open(folder.get().toFile());
+            SystemShellSupport.openFolder(ReportArtifactSupport.reportFolder(currentArtifacts).orElse(DesktopPaths.resolveUserReportsDir()));
         } catch (Exception error) {
             showError("Unable to open report folder", error);
         }
@@ -609,10 +607,13 @@ public final class SwingWorkbenchLauncher {
         artifactsList.setListData(currentArtifacts.toArray(ApiModels.Artifact[]::new));
         reportPreviewArea.setText(currentArtifacts.isEmpty() ? "No report artifacts are attached to the active scan yet." : "");
         rebuildReportProfiles(latest.reportProfiles());
+        reportFolderStatusLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
         if (!currentArtifacts.isEmpty()) {
-            reportFolderStatusLabel.setText("Report folder: " + ReportArtifactSupport.reportFolder(currentArtifacts).map(Path::toString).orElse("unavailable"));
+            String latestBundle = ReportArtifactSupport.reportFolder(currentArtifacts)
+                    .map(path -> path.getFileName() != null ? path.getFileName().toString() : path.toString())
+                    .orElse("none");
             latestArtifactStatusLabel.setText(
-                    "Latest artifact: " + ReportArtifactSupport.preferredOpenArtifact(currentArtifacts)
+                    "Latest bundle: " + latestBundle + " | Latest report: " + ReportArtifactSupport.preferredOpenArtifact(currentArtifacts)
                             .map(ReportArtifactSupport::displayName)
                             .orElse("none")
             );
@@ -621,8 +622,7 @@ public final class SwingWorkbenchLauncher {
                             + " | Supporting artifacts: " + ReportArtifactSupport.supportingArtifactCount(currentArtifacts)
             );
         } else {
-            reportFolderStatusLabel.setText("Report folder: unavailable");
-            latestArtifactStatusLabel.setText("Latest artifact: none");
+            latestArtifactStatusLabel.setText("Latest bundle: none");
             generatedReportsStatusLabel.setText("Generated reports: --");
         }
 
@@ -765,9 +765,17 @@ public final class SwingWorkbenchLauncher {
         return button;
     }
 
-    private JPanel createReportLeftColumn(Component summaryPanel, JScrollPane profilesScroll, JScrollPane artifactsScroll) {
+    private JPanel createReportLeftColumn(
+            Component summaryPanel,
+            Component profileActions,
+            JScrollPane profilesScroll,
+            JScrollPane artifactsScroll
+    ) {
         JPanel profilesSection = new JPanel(new BorderLayout(0, 8));
-        profilesSection.add(includePlusVariantsCheck, BorderLayout.NORTH);
+        JPanel profilesHeader = new JPanel(new BorderLayout(0, 8));
+        profilesHeader.add(includePlusVariantsCheck, BorderLayout.NORTH);
+        profilesHeader.add(profileActions, BorderLayout.SOUTH);
+        profilesSection.add(profilesHeader, BorderLayout.NORTH);
         profilesSection.add(profilesScroll, BorderLayout.CENTER);
 
         JPanel topColumn = new JPanel(new BorderLayout(0, 12));
@@ -817,6 +825,36 @@ public final class SwingWorkbenchLauncher {
                 .filter(JCheckBox::isSelected)
                 .map(checkBox -> String.valueOf(checkBox.getClientProperty("reportProfileId")))
                 .toList();
+    }
+
+    private void selectAllReportProfiles() {
+        if (reportProfilesPanel == null) {
+            return;
+        }
+        java.util.Arrays.stream(reportProfilesPanel.getComponents())
+                .filter(component -> component instanceof JCheckBox)
+                .map(component -> (JCheckBox) component)
+                .forEach(checkBox -> checkBox.setSelected(true));
+    }
+
+    private void selectRecommendedReportProfiles() {
+        List<String> recommendedIds = List.of(
+                "modern-report",
+                "executive-summary",
+                "pdf",
+                "machine-readable-json",
+                "sarif"
+        );
+        if (reportProfilesPanel == null) {
+            return;
+        }
+        java.util.Arrays.stream(reportProfilesPanel.getComponents())
+                .filter(component -> component instanceof JCheckBox)
+                .map(component -> (JCheckBox) component)
+                .forEach(checkBox -> {
+                    String profileId = String.valueOf(checkBox.getClientProperty("reportProfileId"));
+                    checkBox.setSelected(recommendedIds.contains(profileId));
+                });
     }
 
     private JLabel createMetricLabel(String text) {
