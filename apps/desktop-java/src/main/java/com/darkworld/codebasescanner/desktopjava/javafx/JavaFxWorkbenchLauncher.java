@@ -45,6 +45,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.TilePane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Screen;
@@ -103,6 +104,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private Label latestArtifactLabel;
     private Label generatedReportsLabel;
     private Label selectedArtifactLabel;
+    private Label selectedArtifactMetaLabel;
     private VBox reportProfilesBox;
     private CheckBox includePlusVariantsCheck;
 
@@ -299,7 +301,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
         SplitPane centerSplit = new SplitPane(workspaceTabs, inspectorTabs);
         centerSplit.getStyleClass().add("center-split");
-        centerSplit.setDividerPositions(0.74);
+        centerSplit.setDividerPositions(0.79);
 
         consoleArea = readOnlyArea();
         consoleArea.setPrefRowCount(8);
@@ -346,12 +348,12 @@ public final class JavaFxWorkbenchLauncher extends Application {
 
         SplitPane contentSplit = new SplitPane(new VBox(navigationTree), centerSplit);
         contentSplit.getStyleClass().add("content-split");
-        contentSplit.setDividerPositions(0.16);
+        contentSplit.setDividerPositions(0.17);
 
         SplitPane vertical = new SplitPane(contentSplit, consoleBox);
         vertical.getStyleClass().add("vertical-split");
         vertical.setOrientation(Orientation.VERTICAL);
-        vertical.setDividerPositions(0.76);
+        vertical.setDividerPositions(0.80);
         return vertical;
     }
 
@@ -512,12 +514,16 @@ public final class JavaFxWorkbenchLauncher extends Application {
             if (newValue == null) {
                 return;
             }
-            selectedArtifactLabel.setText("Selected report: " + ReportArtifactSupport.displayName(newValue));
+            selectedArtifactLabel.setText(ReportArtifactSupport.displayName(newValue));
+            if (selectedArtifactMetaLabel != null) {
+                selectedArtifactMetaLabel.setText(ReportArtifactSupport.subtitle(newValue));
+            }
             inspectorArea.setText(WorkbenchText.formatArtifactDetails(newValue));
             reportPreviewArea.setText(LocalFilePreviewer.filePreview(newValue.path(), 120_000, 320));
         });
 
         reportPreviewArea = readOnlyArea();
+        reportPreviewArea.getStyleClass().add("report-preview-area");
         reportProfilesBox = new VBox(8);
         includePlusVariantsCheck = new CheckBox("Include plus variants with evidence");
         includePlusVariantsCheck.setSelected(true);
@@ -532,32 +538,30 @@ public final class JavaFxWorkbenchLauncher extends Application {
         );
         reportHintLabel.getStyleClass().add("status-line");
         reportHintLabel.setWrapText(true);
-        reportFolderLabel = new Label("Reports home: " + DesktopPaths.resolveUserReportsDir());
-        reportFolderLabel.getStyleClass().add("status-line");
-        latestArtifactLabel = new Label("Latest bundle: none");
-        latestArtifactLabel.getStyleClass().add("status-line");
-        generatedReportsLabel = new Label("Generated reports: --");
-        generatedReportsLabel.getStyleClass().add("status-line");
-        selectedArtifactLabel = new Label("Selected report: none");
-        selectedArtifactLabel.getStyleClass().add("status-line");
+        reportFolderLabel = infoCardValueLabel(DesktopPaths.resolveUserReportsDir().toString());
+        latestArtifactLabel = infoCardValueLabel("No published bundle yet");
+        generatedReportsLabel = infoCardDetailLabel("0 published reports | 0 supporting artifacts");
+        selectedArtifactLabel = infoCardValueLabel("No report selected");
+        selectedArtifactMetaLabel = infoCardDetailLabel("Generate or select a report to preview it here.");
         Button selectRecommendedButton = actionButton("Recommended", this::selectRecommendedReportProfiles);
         Button selectAllButton = actionButton("All Profiles", this::selectAllReportProfiles);
         FlowPane profileActions = new FlowPane(8, 8, selectRecommendedButton, selectAllButton);
         ScrollPane profilesScroll = new ScrollPane(reportProfilesBox);
         profilesScroll.setFitToWidth(true);
         profilesScroll.setPrefViewportHeight(180);
-        GridPane reportSummary = new GridPane();
-        reportSummary.getStyleClass().add("report-summary-grid");
-        reportSummary.setHgap(12);
-        reportSummary.setVgap(8);
-        reportSummary.add(labeledSection("Report Output"), 0, 0);
-        reportSummary.add(reportHintLabel, 0, 1, 2, 1);
-        reportSummary.add(reportFolderLabel, 0, 2);
-        reportSummary.add(latestArtifactLabel, 0, 3);
-        reportSummary.add(generatedReportsLabel, 1, 2);
+        TilePane reportDashboard = new TilePane();
+        reportDashboard.getStyleClass().add("report-dashboard");
+        reportDashboard.setHgap(10);
+        reportDashboard.setVgap(10);
+        reportDashboard.setPrefColumns(3);
+        reportDashboard.getChildren().addAll(
+                infoCard("Reports Home", reportFolderLabel, reportHintLabel),
+                infoCard("Latest Bundle", latestArtifactLabel, generatedReportsLabel),
+                infoCard("Selected Report", selectedArtifactLabel, null)
+        );
         VBox leftColumn = new VBox(
                 10,
-                reportSummary,
+                reportDashboard,
                 labeledSection("Report Profiles"),
                 profileActions,
                 includePlusVariantsCheck,
@@ -567,14 +571,18 @@ public final class JavaFxWorkbenchLauncher extends Application {
         );
         leftColumn.getStyleClass().add("report-left-column");
         VBox.setVgrow(artifactsList, Priority.ALWAYS);
-        VBox previewColumn = new VBox(10, selectedArtifactLabel, reportPreviewArea);
-        previewColumn.getStyleClass().add("report-left-column");
+        VBox previewColumn = new VBox(10, labeledSection("Preview"), selectedArtifactMetaLabel, reportPreviewArea);
+        previewColumn.getStyleClass().addAll("report-left-column", "report-preview-pane");
         VBox.setVgrow(reportPreviewArea, Priority.ALWAYS);
         SplitPane split = new SplitPane(leftColumn, previewColumn);
         split.getStyleClass().add("report-split");
-        split.setDividerPositions(0.36);
+        split.setDividerPositions(0.42);
 
-        reportPreviewArea.setText("Generate or select a report to preview it here.");
+        reportPreviewArea.setText(
+                "Generate or select a report to preview it here." + System.lineSeparator() + System.lineSeparator()
+                        + "Published reports are stored in:" + System.lineSeparator()
+                        + DesktopPaths.resolveUserReportsDir()
+        );
         VBox shell = new VBox(12, actions, split);
         shell.getStyleClass().add("workspace-pane");
         shell.setPadding(new Insets(12));
@@ -910,15 +918,17 @@ public final class JavaFxWorkbenchLauncher extends Application {
                     .map(path -> path.getFileName() != null ? path.getFileName().toString() : path.toString())
                     .orElse("none");
             if (reportFolderLabel != null) {
-                reportFolderLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
+                reportFolderLabel.setText(DesktopPaths.resolveUserReportsDir().toString());
             }
             if (latestArtifactLabel != null) {
-                latestArtifactLabel.setText("Latest bundle: " + latestBundle + " | Latest report: " + latestArtifactName);
+                latestArtifactLabel.setText(latestBundle + " | " + latestArtifactName);
             }
             if (generatedReportsLabel != null) {
                 generatedReportsLabel.setText(
-                        "Generated reports: " + ReportArtifactSupport.generatedReportCount(currentArtifacts)
-                                + " | Supporting artifacts: " + ReportArtifactSupport.supportingArtifactCount(currentArtifacts)
+                        ReportArtifactSupport.generatedReportCount(currentArtifacts)
+                                + " published reports | "
+                                + ReportArtifactSupport.supportingArtifactCount(currentArtifacts)
+                                + " supporting artifacts"
                 );
             }
             if (reportsFolderStatusLabel != null) {
@@ -926,13 +936,13 @@ public final class JavaFxWorkbenchLauncher extends Application {
             }
         } else {
             if (reportFolderLabel != null) {
-                reportFolderLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
+                reportFolderLabel.setText(DesktopPaths.resolveUserReportsDir().toString());
             }
             if (latestArtifactLabel != null) {
-                latestArtifactLabel.setText("Latest bundle: none");
+                latestArtifactLabel.setText("No published bundle yet");
             }
             if (generatedReportsLabel != null) {
-                generatedReportsLabel.setText("Generated reports: --");
+                generatedReportsLabel.setText("0 published reports | 0 supporting artifacts");
             }
             if (reportsFolderStatusLabel != null) {
                 reportsFolderStatusLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
@@ -957,7 +967,10 @@ public final class JavaFxWorkbenchLauncher extends Application {
                     );
         } else {
             if (selectedArtifactLabel != null) {
-                selectedArtifactLabel.setText("Selected report: none");
+                selectedArtifactLabel.setText("No report selected");
+            }
+            if (selectedArtifactMetaLabel != null) {
+                selectedArtifactMetaLabel.setText("Generate or select a report to preview it here.");
             }
             reportPreviewArea.setText("No report artifacts are attached to the active scan yet.");
         }
@@ -1172,6 +1185,31 @@ public final class JavaFxWorkbenchLauncher extends Application {
         VBox card = new VBox(3, primary, secondary, tertiary);
         card.getStyleClass().add("artifact-cell");
         return card;
+    }
+
+    private VBox infoCard(String title, Label valueLabel, Label detailLabel) {
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("info-card-title");
+        VBox card = new VBox(6, titleLabel, valueLabel);
+        if (detailLabel != null) {
+            card.getChildren().add(detailLabel);
+        }
+        card.getStyleClass().add("info-card");
+        return card;
+    }
+
+    private Label infoCardValueLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("info-card-value");
+        label.setWrapText(true);
+        return label;
+    }
+
+    private Label infoCardDetailLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("info-card-detail");
+        label.setWrapText(true);
+        return label;
     }
 
     private Label labeledSection(String text) {

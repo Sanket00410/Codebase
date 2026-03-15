@@ -297,6 +297,35 @@
     -fx-padding: 12px;
 }
 
+.report-dashboard {
+    -fx-pref-tile-width: 210px;
+}
+
+.info-card {
+    -fx-background-color: linear-gradient(to bottom, rgba(24, 38, 61, 0.96), rgba(19, 30, 47, 0.96));
+    -fx-background-radius: 12px;
+    -fx-border-radius: 12px;
+    -fx-border-color: #2b4167;
+    -fx-padding: 12px;
+}
+
+.info-card-title {
+    -fx-text-fill: #8ca3cb;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+}
+
+.info-card-value {
+    -fx-text-fill: #f2f6ff;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.info-card-detail {
+    -fx-text-fill: #8fa4ca;
+    -fx-font-size: 11px;
+}
+
 .report-summary-grid {
     -fx-background-color: linear-gradient(to bottom, rgba(24, 38, 61, 0.96), rgba(19, 30, 47, 0.96));
     -fx-background-radius: 12px;
@@ -314,7 +343,11 @@
 }
 
 .artifact-cell {
-    -fx-padding: 6 4 6 4;
+    -fx-padding: 8 6 8 6;
+    -fx-background-color: linear-gradient(to bottom, rgba(18, 28, 44, 0.88), rgba(15, 23, 35, 0.88));
+    -fx-background-radius: 10px;
+    -fx-border-radius: 10px;
+    -fx-border-color: rgba(42, 60, 92, 0.85);
 }
 
 .artifact-primary {
@@ -367,6 +400,15 @@
     -fx-background-radius: 14px;
     -fx-border-radius: 14px;
     -fx-border-color: #22314d;
+}
+
+.report-preview-pane {
+    -fx-spacing: 8px;
+}
+
+.report-preview-area,
+.report-preview-area .content {
+    -fx-background-color: #11192a;
 }
 
 .timeline-pane {

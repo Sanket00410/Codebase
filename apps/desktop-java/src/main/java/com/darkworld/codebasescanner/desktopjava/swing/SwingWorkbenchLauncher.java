@@ -290,19 +290,20 @@ public final class SwingWorkbenchLauncher {
 
         navigationTree = new JTree(buildNavigationModel());
         navigationTree.setRootVisible(false);
+        navigationTree.setRowHeight(28);
         navigationTree.addTreeSelectionListener(this::onTreeSelectionChanged);
 
         JSplitPane leftSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        leftSplit.setLeftComponent(new JScrollPane(navigationTree));
+        leftSplit.setLeftComponent(createSectionPanel("Workspace", styledScrollPane(navigationTree)));
         leftSplit.setRightComponent(buildCenterAndInspector());
-        leftSplit.setResizeWeight(0.16);
-        leftSplit.setDividerLocation(250);
+        leftSplit.setResizeWeight(0.17);
+        leftSplit.setDividerLocation(230);
 
         JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         verticalSplit.setTopComponent(leftSplit);
         verticalSplit.setBottomComponent(buildConsolePane());
-        verticalSplit.setResizeWeight(0.75);
-        verticalSplit.setDividerLocation(620);
+        verticalSplit.setResizeWeight(0.80);
+        verticalSplit.setDividerLocation(660);
 
         panel.add(verticalSplit, BorderLayout.CENTER);
         return panel;
@@ -319,14 +320,14 @@ public final class SwingWorkbenchLauncher {
         JTabbedPane inspectorTabs = new JTabbedPane();
         inspectorArea = createReadOnlyTextArea();
         sourceArea = createReadOnlyTextArea();
-        inspectorTabs.addTab("Details", new JScrollPane(inspectorArea));
-        inspectorTabs.addTab("Source", new JScrollPane(sourceArea));
+        inspectorTabs.addTab("Details", styledScrollPane(inspectorArea));
+        inspectorTabs.addTab("Source", styledScrollPane(sourceArea));
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setLeftComponent(workspaceTabs);
-        splitPane.setRightComponent(inspectorTabs);
-        splitPane.setResizeWeight(0.75);
-        splitPane.setDividerLocation(980);
+        splitPane.setRightComponent(createSectionPanel("Inspector", inspectorTabs));
+        splitPane.setResizeWeight(0.80);
+        splitPane.setDividerLocation(1080);
         return splitPane;
     }
 
@@ -355,9 +356,16 @@ public final class SwingWorkbenchLauncher {
         scansTable.setSelectionModel(new DefaultListSelectionModel());
         scansTable.getSelectionModel().addListSelectionListener(this::onScanSelected);
 
-        panel.add(summaryRow, BorderLayout.NORTH);
-        panel.add(new JScrollPane(overviewArea), BorderLayout.CENTER);
-        panel.add(new JScrollPane(scansTable), BorderLayout.SOUTH);
+        JSplitPane overviewSplit = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                createSectionPanel("Repository Summary", styledScrollPane(overviewArea)),
+                createSectionPanel("Recent Scans", styledScrollPane(scansTable))
+        );
+        overviewSplit.setResizeWeight(0.42);
+        overviewSplit.setDividerLocation(250);
+
+        panel.add(createSectionPanel("Posture", summaryRow), BorderLayout.NORTH);
+        panel.add(overviewSplit, BorderLayout.CENTER);
         return panel;
     }
 
@@ -383,7 +391,7 @@ public final class SwingWorkbenchLauncher {
         top.add(findingsSummaryStatusLabel, BorderLayout.SOUTH);
         top.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
         panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(findingsTable), BorderLayout.CENTER);
+        panel.add(createSectionPanel("Finding Explorer", styledScrollPane(findingsTable)), BorderLayout.CENTER);
         return panel;
     }
 
@@ -439,9 +447,9 @@ public final class SwingWorkbenchLauncher {
         generatedReportsStatusLabel = new JLabel("Generated reports: --");
         selectedArtifactStatusLabel = new JLabel("Selected report: none");
 
-        JPanel reportSummaryPanel = new JPanel(new GridLayout(0, 1, 0, 6));
-        reportSummaryPanel.add(new JLabel("Report output"));
-        reportSummaryPanel.add(new JLabel("<html>New reports open automatically after generation and the save location is shown here.</html>"));
+        JPanel reportSummaryPanel = new JPanel(new GridLayout(0, 1, 0, 8));
+        reportSummaryPanel.setOpaque(false);
+        reportSummaryPanel.add(new JLabel("<html><b>Published reports open automatically after generation.</b></html>"));
         reportSummaryPanel.add(reportFolderStatusLabel);
         reportSummaryPanel.add(latestArtifactStatusLabel);
         reportSummaryPanel.add(generatedReportsStatusLabel);
@@ -449,15 +457,15 @@ public final class SwingWorkbenchLauncher {
         JPanel previewPanel = new JPanel(new BorderLayout(0, 10));
         previewPanel.setBackground(new Color(0x101826));
         previewPanel.add(selectedArtifactStatusLabel, BorderLayout.NORTH);
-        previewPanel.add(new JScrollPane(reportPreviewArea), BorderLayout.CENTER);
+        previewPanel.add(styledScrollPane(reportPreviewArea), BorderLayout.CENTER);
 
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
-                createReportLeftColumn(reportSummaryPanel, profileActions, profilesScroll, new JScrollPane(artifactsList)),
+                createReportLeftColumn(reportSummaryPanel, profileActions, profilesScroll, styledScrollPane(artifactsList)),
                 createSectionPanel("Preview", previewPanel)
         );
-        splitPane.setResizeWeight(0.4);
-        splitPane.setDividerLocation(430);
+        splitPane.setResizeWeight(0.44);
+        splitPane.setDividerLocation(470);
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         actions.add(makeToolbarButton("Generate Selected Reports", this::generateReports));
@@ -479,7 +487,7 @@ public final class SwingWorkbenchLauncher {
         configureDataTable(dependenciesTable);
         dependenciesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         dependenciesTable.getSelectionModel().addListSelectionListener(this::onDependencySelected);
-        panel.add(new JScrollPane(dependenciesTable), BorderLayout.CENTER);
+        panel.add(createSectionPanel("Dependency Explorer", styledScrollPane(dependenciesTable)), BorderLayout.CENTER);
         return panel;
     }
 
@@ -512,20 +520,17 @@ public final class SwingWorkbenchLauncher {
         top.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
 
         panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(pluginsTable), BorderLayout.CENTER);
+        panel.add(createSectionPanel("Runtime Inventory", styledScrollPane(pluginsTable)), BorderLayout.CENTER);
         return panel;
     }
 
     private JPanel buildConsolePane() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createEmptyBorder(8, 0, 0, 0),
-                BorderFactory.createTitledBorder("Event Console")
-        ));
+        panel.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
         panel.setBackground(new Color(0x101826));
         consoleArea = createReadOnlyTextArea();
         consoleArea.setRows(8);
-        panel.add(new JScrollPane(consoleArea), BorderLayout.CENTER);
+        panel.add(createSectionPanel("Event Console", styledScrollPane(consoleArea)), BorderLayout.CENTER);
         return panel;
     }
 
@@ -919,6 +924,13 @@ public final class SwingWorkbenchLauncher {
     private JButton makeToolbarButton(String label, Runnable action) {
         JButton button = new JButton(label);
         button.putClientProperty("JButton.buttonType", "roundRect");
+        if ("Start Scan".equals(label) || label.contains("Generate")) {
+            button.putClientProperty("FlatLaf.style",
+                    "font: bold 13; background:#c9a14b; foreground:#14100a; borderColor:#dfbf7a");
+        } else {
+            button.putClientProperty("FlatLaf.style",
+                    "font: 600 13; background:#162338; foreground:#edf4ff; borderColor:#2d436a");
+        }
         button.addActionListener(event -> action.run());
         return button;
     }
@@ -950,11 +962,23 @@ public final class SwingWorkbenchLauncher {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(new Color(0x101826));
         panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder(title),
-                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+                BorderFactory.createLineBorder(new Color(0x22314d)),
+                BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
+        JLabel titleLabel = new JLabel(title.toUpperCase());
+        titleLabel.setForeground(new Color(0xb7c6e4));
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
+        panel.add(titleLabel, BorderLayout.NORTH);
         panel.add(content, BorderLayout.CENTER);
         return panel;
+    }
+
+    private JScrollPane styledScrollPane(Component content) {
+        JScrollPane scrollPane = new JScrollPane(content);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.getViewport().setBackground(new Color(0x101826));
+        return scrollPane;
     }
 
     private void rebuildReportProfiles(List<ApiModels.ReportProfileDefinition> profiles) {
@@ -1089,12 +1113,15 @@ public final class SwingWorkbenchLauncher {
     }
 
     private void configureDataTable(JTable table) {
-        table.setRowHeight(28);
+        table.setRowHeight(32);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
         table.setFillsViewportHeight(true);
         table.setAutoCreateRowSorter(true);
         table.setShowVerticalLines(false);
         table.setShowHorizontalLines(true);
+        table.setIntercellSpacing(new Dimension(0, 1));
+        table.getTableHeader().setReorderingAllowed(false);
+        table.getTableHeader().setFont(table.getTableHeader().getFont().deriveFont(Font.BOLD, 12f));
     }
 
     private void installTextChangeListener(JTextField field, Runnable action) {
