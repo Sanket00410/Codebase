@@ -71,6 +71,9 @@ public final class SwingWorkbenchLauncher {
     private JLabel findingsLabel;
     private JLabel toolsLabel;
     private JLabel durationLabel;
+    private JLabel headerScansLabel;
+    private JLabel headerInstalledToolsLabel;
+    private JLabel headerActiveFindingsLabel;
     private JTree navigationTree;
     private JTabbedPane workspaceTabs;
     private JTable scansTable;
@@ -235,9 +238,20 @@ public final class SwingWorkbenchLauncher {
         title.setFont(title.getFont().deriveFont(Font.BOLD, 24f));
         backendStatusLabel = new JLabel("Backend starting...");
         repositoryLabel = new JLabel(repositorySummaryText(selectedRepository));
+        repositoryLabel.setForeground(new Color(0x8fa4ca));
         titlePanel.add(title, BorderLayout.NORTH);
         titlePanel.add(repositoryLabel, BorderLayout.CENTER);
         titlePanel.add(backendStatusLabel, BorderLayout.EAST);
+        styleBackendStatusLabel(false);
+
+        JPanel headerMetricsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        headerMetricsPanel.setOpaque(false);
+        headerScansLabel = createCompactMetricLabel("Recent scans", "--");
+        headerInstalledToolsLabel = createCompactMetricLabel("Installed tools", "--");
+        headerActiveFindingsLabel = createCompactMetricLabel("Active findings", "--");
+        headerMetricsPanel.add(headerScansLabel);
+        headerMetricsPanel.add(headerInstalledToolsLabel);
+        headerMetricsPanel.add(headerActiveFindingsLabel);
 
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
@@ -253,6 +267,7 @@ public final class SwingWorkbenchLauncher {
         toolBar.add(makeToolbarButton("Sync Advisories", this::syncAdvisories));
 
         panel.add(titlePanel, BorderLayout.NORTH);
+        panel.add(headerMetricsPanel, BorderLayout.CENTER);
         panel.add(toolBar, BorderLayout.SOUTH);
         return panel;
     }
@@ -617,7 +632,9 @@ public final class SwingWorkbenchLauncher {
 
     private void applySnapshot(DesktopApplicationService.DesktopSnapshot latest) {
         backendStatusLabel.setText(latest.backendReady() ? "Backend ready" : "Backend unavailable");
+        styleBackendStatusLabel(latest.backendReady());
         repositoryLabel.setText(repositorySummaryText(selectedRepository != null ? selectedRepository : latest.selectedRepository()));
+        updateCompactMetricLabel(headerScansLabel, "Recent scans", Integer.toString(latest.recentScans().size()));
         overviewArea.setText(WorkbenchText.formatRepositorySummary(latest.selectedRepository(), latest.activeScan())
                 + System.lineSeparator() + System.lineSeparator()
                 + WorkbenchText.formatScanOverview(latest.activeScan()));
@@ -688,12 +705,19 @@ public final class SwingWorkbenchLauncher {
             findingsLabel.setText("Findings: " + activeScan.summary().totalFindings());
             toolsLabel.setText("Tools: " + activeScan.completedTools() + "/" + activeScan.totalTools());
             durationLabel.setText("Status: " + activeScan.status());
+            updateCompactMetricLabel(headerActiveFindingsLabel, "Active findings", Integer.toString(activeScan.summary().totalFindings()));
         } else {
             scoreLabel.setText("Score: --");
             findingsLabel.setText("Findings: --");
             toolsLabel.setText("Tools: --");
             durationLabel.setText("Status: idle");
+            updateCompactMetricLabel(headerActiveFindingsLabel, "Active findings", "--");
         }
+        updateCompactMetricLabel(
+                headerInstalledToolsLabel,
+                "Installed tools",
+                currentPlugins.stream().filter(ApiModels.PluginDescriptor::available).count() + "/" + currentPlugins.size()
+        );
 
         inspectorArea.setText(WorkbenchText.formatScanOverview(activeScan));
         sourceArea.setText("Select a finding to load source context.");
@@ -914,6 +938,46 @@ public final class SwingWorkbenchLauncher {
                 BorderFactory.createEmptyBorder(8, 12, 8, 12)
         ));
         return label;
+    }
+
+    private JLabel createCompactMetricLabel(String title, String value) {
+        JLabel label = new JLabel("<html><div style='font-size:11px;color:#8fa4ca;text-transform:uppercase;'>"
+                + escapeHtml(title)
+                + "</div><div style='font-size:18px;font-weight:700;color:#f2f6ff;'>"
+                + escapeHtml(value)
+                + "</div></html>");
+        label.setOpaque(true);
+        label.setBackground(new Color(0x18263d));
+        label.setForeground(new Color(0xecf3ff));
+        label.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0x2b4167)),
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)
+        ));
+        return label;
+    }
+
+    private void updateCompactMetricLabel(JLabel label, String title, String value) {
+        if (label == null) {
+            return;
+        }
+        label.setText("<html><div style='font-size:11px;color:#8fa4ca;text-transform:uppercase;'>"
+                + escapeHtml(title)
+                + "</div><div style='font-size:18px;font-weight:700;color:#f2f6ff;'>"
+                + escapeHtml(value)
+                + "</div></html>");
+    }
+
+    private void styleBackendStatusLabel(boolean ready) {
+        if (backendStatusLabel == null) {
+            return;
+        }
+        backendStatusLabel.setOpaque(true);
+        backendStatusLabel.setForeground(ready ? new Color(0x8ef2c1) : new Color(0xf7d27d));
+        backendStatusLabel.setBackground(ready ? new Color(0x1d4a31) : new Color(0x483412));
+        backendStatusLabel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(ready ? new Color(0x2f8f61) : new Color(0x9c7532)),
+                BorderFactory.createEmptyBorder(7, 12, 7, 12)
+        ));
     }
 
     private JTextArea createReadOnlyTextArea() {

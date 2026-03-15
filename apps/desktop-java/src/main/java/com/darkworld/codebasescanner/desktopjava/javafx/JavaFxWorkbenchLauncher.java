@@ -26,6 +26,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
@@ -66,6 +67,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private Stage stage;
     private Label backendStatusLabel;
     private Label repositoryLabel;
+    private Label headerScansValueLabel;
+    private Label headerInstalledToolsValueLabel;
+    private Label headerActiveFindingsValueLabel;
     private Label scoreLabel;
     private Label findingsLabel;
     private Label toolsLabel;
@@ -215,11 +219,24 @@ public final class JavaFxWorkbenchLauncher extends Application {
         title.getStyleClass().add("header-title");
         repositoryLabel = new Label(repositorySummaryText(selectedRepository));
         repositoryLabel.getStyleClass().add("header-subtitle");
+        repositoryLabel.setTextOverrun(OverrunStyle.CENTER_ELLIPSIS);
         backendStatusLabel = new Label("Backend starting...");
         backendStatusLabel.getStyleClass().addAll("status-pill", "status-pill-pending");
         titleBox.getChildren().addAll(title, repositoryLabel);
         HBox.setHgrow(titleBox, Priority.ALWAYS);
-        box.getChildren().addAll(titleBox, backendStatusLabel);
+
+        HBox headerMetrics = new HBox(10);
+        headerMetrics.getStyleClass().add("header-metrics");
+        headerScansValueLabel = new Label("--");
+        headerInstalledToolsValueLabel = new Label("--");
+        headerActiveFindingsValueLabel = new Label("--");
+        headerMetrics.getChildren().addAll(
+                headerMetricCard("Recent scans", headerScansValueLabel),
+                headerMetricCard("Installed tools", headerInstalledToolsValueLabel),
+                headerMetricCard("Active findings", headerActiveFindingsValueLabel)
+        );
+
+        box.getChildren().addAll(titleBox, headerMetrics, backendStatusLabel);
         return box;
     }
 
@@ -771,6 +788,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
         if (backendStateStatusLabel != null) {
             backendStateStatusLabel.setText(latest.backendReady() ? "Backend: ready" : "Backend: unavailable");
         }
+        if (headerScansValueLabel != null) {
+            headerScansValueLabel.setText(Integer.toString(latest.recentScans().size()));
+        }
         overviewArea.setText(WorkbenchText.formatRepositorySummary(latest.selectedRepository(), latest.activeScan())
                 + System.lineSeparator() + System.lineSeparator()
                 + WorkbenchText.formatScanOverview(latest.activeScan()));
@@ -795,6 +815,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
             statusLabel.setText("Status: " + activeScan.status());
             artifactsLabel.setText("Artifacts: " + currentArtifacts.size());
             missingToolsLabel.setText("Missing tools: " + (int) currentPlugins.stream().filter(plugin -> !plugin.available()).count());
+            if (headerActiveFindingsValueLabel != null) {
+                headerActiveFindingsValueLabel.setText(Integer.toString(activeScan.summary().totalFindings()));
+            }
             inspectorArea.setText(WorkbenchText.formatScanOverview(activeScan));
             if (activeScanStatusLabel != null) {
                 activeScanStatusLabel.setText("Active scan: " + activeScan.scanId());
@@ -809,6 +832,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
             statusLabel.setText("Status: idle");
             artifactsLabel.setText("Artifacts: --");
             missingToolsLabel.setText("Missing tools: --");
+            if (headerActiveFindingsValueLabel != null) {
+                headerActiveFindingsValueLabel.setText("--");
+            }
             if (activeScanStatusLabel != null) {
                 activeScanStatusLabel.setText("Active scan: none");
             }
@@ -852,6 +878,10 @@ public final class JavaFxWorkbenchLauncher extends Application {
             if (reportsFolderStatusLabel != null) {
                 reportsFolderStatusLabel.setText("Reports home: " + DesktopPaths.resolveUserReportsDir());
             }
+        }
+        if (headerInstalledToolsValueLabel != null) {
+            long installedTools = currentPlugins.stream().filter(ApiModels.PluginDescriptor::available).count();
+            headerInstalledToolsValueLabel.setText(installedTools + "/" + currentPlugins.size());
         }
 
         if (!currentFindings.isEmpty()) {
@@ -1047,6 +1077,15 @@ public final class JavaFxWorkbenchLauncher extends Application {
         Label label = new Label(text);
         label.getStyleClass().add("metric-label");
         return label;
+    }
+
+    private VBox headerMetricCard(String title, Label valueLabel) {
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("header-metric-title");
+        valueLabel.getStyleClass().add("header-metric-value");
+        VBox card = new VBox(2, titleLabel, valueLabel);
+        card.getStyleClass().add("header-metric-card");
+        return card;
     }
 
     private Label labeledSection(String text) {
