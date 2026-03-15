@@ -15,19 +15,28 @@ public final class WorkbenchText {
         }
 
         StringJoiner joiner = new StringJoiner(System.lineSeparator());
-        joiner.add("Title: " + safe(finding.title()));
-        joiner.add("Tool: " + safe(finding.sourceTool()));
-        joiner.add("Category: " + safe(finding.category()));
-        joiner.add("Severity: " + safe(finding.severity()));
-        joiner.add("Rule ID: " + safe(finding.ruleId()));
-        joiner.add("Package: " + safe(finding.packageName()) + " " + safe(finding.packageVersion()));
-        joiner.add("Fixed Version: " + safe(finding.fixedVersion()));
-        joiner.add("CVE: " + String.join(", ", finding.safeCveIds()));
-        joiner.add("CWE: " + String.join(", ", finding.safeCweIds()));
-        joiner.add("Confidence: " + (finding.confidence() == null ? "n/a" : String.format("%.2f", finding.confidence())));
+        joiner.add("FINDING");
+        joiner.add(safe(finding.title()));
+        joiner.add("");
+        joiner.add("Summary");
+        joiner.add("  Tool: " + safe(finding.sourceTool()));
+        joiner.add("  Category: " + safe(finding.category()));
+        joiner.add("  Severity: " + safe(finding.severity()));
+        joiner.add("  Rule ID: " + safe(finding.ruleId()));
+        joiner.add("  Confidence: " + (finding.confidence() == null ? "n/a" : String.format("%.2f", finding.confidence())));
+        joiner.add("");
+        joiner.add("Identifiers");
+        joiner.add("  CVE: " + commaList(finding.safeCveIds()));
+        joiner.add("  CWE: " + commaList(finding.safeCweIds()));
+        joiner.add("");
+        joiner.add("Package / Fix");
+        joiner.add("  Package: " + joinWords(safe(finding.packageName()), safe(finding.packageVersion())));
+        joiner.add("  Fixed Version: " + safe(finding.fixedVersion()));
         if (finding.location() != null) {
-            joiner.add("File: " + safe(finding.location().path()));
-            joiner.add("Line: " + safeInteger(finding.location().line()));
+            joiner.add("");
+            joiner.add("Location");
+            joiner.add("  File: " + safe(finding.location().path()));
+            joiner.add("  Line: " + safeInteger(finding.location().line()));
         }
         joiner.add("");
         joiner.add("Description:");
@@ -50,15 +59,18 @@ public final class WorkbenchText {
             return "Select a generated report or supporting artifact to inspect it here.";
         }
         StringJoiner joiner = new StringJoiner(System.lineSeparator());
-        joiner.add("Saved File: " + ReportArtifactSupport.displayName(artifact));
-        joiner.add("Label: " + safe(artifact.label()));
-        joiner.add("Kind: " + safe(artifact.kind()));
-        joiner.add("Profile: " + safe(artifact.profileId()));
-        joiner.add("Media Type: " + safe(artifact.mediaType()));
-        joiner.add("Path: " + safe(artifact.path()));
+        joiner.add("REPORT ARTIFACT");
+        joiner.add(ReportArtifactSupport.displayName(artifact));
+        joiner.add("");
+        joiner.add("Summary");
+        joiner.add("  Label: " + safe(artifact.label()));
+        joiner.add("  Kind: " + safe(artifact.kind()));
+        joiner.add("  Profile: " + safe(artifact.profileId()));
+        joiner.add("  Media Type: " + safe(artifact.mediaType()));
+        joiner.add("  Path: " + safe(artifact.path()));
         ReportArtifactSupport.artifactPath(artifact)
                 .map(Path::getParent)
-                .ifPresent(folder -> joiner.add("Saved Folder: " + folder));
+                .ifPresent(folder -> joiner.add("  Saved Folder: " + folder));
         joiner.add("");
         joiner.add(safe(artifact.description()));
         return joiner.toString();
@@ -69,14 +81,17 @@ public final class WorkbenchText {
             return "Select a tool runtime to inspect install state, binary path, and version.";
         }
         StringJoiner joiner = new StringJoiner(System.lineSeparator());
-        joiner.add("Tool: " + safe(plugin.metadata().displayName()));
-        joiner.add("Category: " + safe(plugin.metadata().category()));
-        joiner.add("Install Strategy: " + safe(plugin.metadata().installStrategy()));
-        joiner.add("Available: " + plugin.available());
+        joiner.add("TOOL RUNTIME");
+        joiner.add(safe(plugin.metadata().displayName()));
+        joiner.add("");
+        joiner.add("Summary");
+        joiner.add("  Category: " + safe(plugin.metadata().category()));
+        joiner.add("  Install Strategy: " + safe(plugin.metadata().installStrategy()));
+        joiner.add("  Available: " + plugin.available());
         if (plugin.binaryStatus() != null) {
-            joiner.add("Version: " + safe(plugin.binaryStatus().version()));
-            joiner.add("Binary: " + safe(plugin.binaryStatus().resolvedPath()));
-            joiner.add("Install Hint: " + safe(plugin.binaryStatus().installHint()));
+            joiner.add("  Version: " + safe(plugin.binaryStatus().version()));
+            joiner.add("  Binary: " + safe(plugin.binaryStatus().resolvedPath()));
+            joiner.add("  Install Hint: " + safe(plugin.binaryStatus().installHint()));
         }
         joiner.add("");
         joiner.add(safe(plugin.metadata().description()));
@@ -89,11 +104,14 @@ public final class WorkbenchText {
         }
 
         StringJoiner joiner = new StringJoiner(System.lineSeparator());
-        joiner.add("Package: " + safe(dependencyNode.id()));
-        joiner.add("Ecosystem: " + safe(dependencyNode.ecosystem()));
-        joiner.add("Version: " + safe(dependencyNode.version()));
-        joiner.add("Direct: " + String.valueOf(Boolean.TRUE.equals(dependencyNode.direct())));
-        joiner.add("Declared Dependencies: " + (dependencyNode.dependencies() == null ? 0 : dependencyNode.dependencies().size()));
+        joiner.add("DEPENDENCY");
+        joiner.add(safe(dependencyNode.id()));
+        joiner.add("");
+        joiner.add("Summary");
+        joiner.add("  Ecosystem: " + safe(dependencyNode.ecosystem()));
+        joiner.add("  Version: " + safe(dependencyNode.version()));
+        joiner.add("  Direct: " + String.valueOf(Boolean.TRUE.equals(dependencyNode.direct())));
+        joiner.add("  Declared Dependencies: " + (dependencyNode.dependencies() == null ? 0 : dependencyNode.dependencies().size()));
         joiner.add("");
         joiner.add("Related Findings:");
         if (scanResult == null || scanResult.safeFindings().isEmpty()) {
@@ -118,14 +136,15 @@ public final class WorkbenchText {
             return "No persisted scans are available yet. Start a repository scan to populate the workbench.";
         }
         StringJoiner joiner = new StringJoiner(System.lineSeparator());
-        joiner.add("Scan ID: " + safe(scanResult.scanId()));
-        joiner.add("Repository: " + safe(scanResult.repositoryPath()));
-        joiner.add("Status: " + safe(scanResult.status()));
-        joiner.add("Started: " + safe(scanResult.startedAt()));
-        joiner.add("Completed: " + safe(scanResult.completedAt()));
+        joiner.add("SCAN OVERVIEW");
+        joiner.add("  Scan ID: " + safe(scanResult.scanId()));
+        joiner.add("  Repository: " + safe(scanResult.repositoryPath()));
+        joiner.add("  Status: " + safe(scanResult.status()));
+        joiner.add("  Started: " + safe(scanResult.startedAt()));
+        joiner.add("  Completed: " + safe(scanResult.completedAt()));
         if (scanResult.summary() != null) {
-            joiner.add("Score: " + safeDouble(scanResult.summary().score()));
-            joiner.add("Findings: " + safeInteger(scanResult.summary().totalFindings()));
+            joiner.add("  Score: " + safeDouble(scanResult.summary().score()));
+            joiner.add("  Findings: " + safeInteger(scanResult.summary().totalFindings()));
             joiner.add("Severity Mix:");
             scanResult.summary().safeBySeverity().entrySet().stream()
                     .sorted(Map.Entry.comparingByKey(Comparator.naturalOrder()))
@@ -156,5 +175,25 @@ public final class WorkbenchText {
 
     private static String safeDouble(Double value) {
         return value == null ? "n/a" : String.format("%.2f", value);
+    }
+
+    private static String commaList(Iterable<String> values) {
+        StringJoiner joiner = new StringJoiner(", ");
+        values.forEach(joiner::add);
+        String resolved = joiner.toString();
+        return resolved.isBlank() ? "none" : resolved;
+    }
+
+    private static String joinWords(String first, String second) {
+        if ("n/a".equals(first) && "n/a".equals(second)) {
+            return "n/a";
+        }
+        if ("n/a".equals(first)) {
+            return second;
+        }
+        if ("n/a".equals(second)) {
+            return first;
+        }
+        return first + " " + second;
     }
 }

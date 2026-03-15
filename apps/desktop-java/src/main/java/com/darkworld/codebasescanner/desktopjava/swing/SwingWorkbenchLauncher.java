@@ -29,16 +29,21 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JToolBar;
 import javax.swing.JTree;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.WindowConstants;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.BorderLayout;
@@ -90,12 +95,18 @@ public final class SwingWorkbenchLauncher {
     private JLabel latestArtifactStatusLabel;
     private JLabel generatedReportsStatusLabel;
     private JLabel selectedArtifactStatusLabel;
+    private JLabel findingsSummaryStatusLabel;
+    private JLabel runtimeSummaryStatusLabel;
     private JPanel reportProfilesPanel;
     private JCheckBox includePlusVariantsCheck;
+    private JTextField findingsFilterField;
+    private JTextField pluginsFilterField;
     private DefaultTableModel scansModel;
     private DefaultTableModel findingsModel;
     private DefaultTableModel dependenciesModel;
     private DefaultTableModel pluginsModel;
+    private TableRowSorter<DefaultTableModel> findingsSorter;
+    private TableRowSorter<DefaultTableModel> pluginsSorter;
 
     private DesktopApplicationService.DesktopSnapshot snapshot;
     private Path selectedRepository = DesktopPaths.looksLikeRepositoryRoot(repositoryRoot) ? repositoryRoot : null;
@@ -357,8 +368,21 @@ public final class SwingWorkbenchLauncher {
         findingsModel = tableModel("Severity", "Category", "Tool", "Title", "Location");
         findingsTable = new JTable(findingsModel);
         configureDataTable(findingsTable);
+        findingsSorter = new TableRowSorter<>(findingsModel);
+        findingsTable.setRowSorter(findingsSorter);
         findingsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         findingsTable.getSelectionModel().addListSelectionListener(this::onFindingSelected);
+        findingsFilterField = new JTextField();
+        findingsFilterField.setToolTipText("Filter findings by severity, tool, title, location, or package");
+        installTextChangeListener(findingsFilterField, this::applyFindingsFilter);
+        findingsSummaryStatusLabel = new JLabel("Visible findings: 0");
+
+        JPanel top = new JPanel(new BorderLayout(8, 8));
+        top.setOpaque(false);
+        top.add(findingsFilterField, BorderLayout.CENTER);
+        top.add(findingsSummaryStatusLabel, BorderLayout.SOUTH);
+        top.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+        panel.add(top, BorderLayout.NORTH);
         panel.add(new JScrollPane(findingsTable), BorderLayout.CENTER);
         return panel;
     }
@@ -466,14 +490,28 @@ public final class SwingWorkbenchLauncher {
         pluginsModel = tableModel("Tool", "Category", "State", "Version");
         pluginsTable = new JTable(pluginsModel);
         configureDataTable(pluginsTable);
+        pluginsSorter = new TableRowSorter<>(pluginsModel);
+        pluginsTable.setRowSorter(pluginsSorter);
         pluginsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         pluginsTable.getSelectionModel().addListSelectionListener(this::onPluginSelected);
+        pluginsFilterField = new JTextField();
+        pluginsFilterField.setToolTipText("Filter tools by name, category, state, or version");
+        installTextChangeListener(pluginsFilterField, this::applyPluginsFilter);
+        runtimeSummaryStatusLabel = new JLabel("Runtime inventory: 0 tools");
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        actions.setOpaque(false);
         actions.add(makeToolbarButton("Install Selected", this::installSelectedPlugin));
         actions.add(makeToolbarButton("Refresh Runtime", this::refreshSnapshot));
 
-        panel.add(actions, BorderLayout.NORTH);
+        JPanel top = new JPanel(new BorderLayout(8, 8));
+        top.setOpaque(false);
+        top.add(actions, BorderLayout.NORTH);
+        top.add(pluginsFilterField, BorderLayout.CENTER);
+        top.add(runtimeSummaryStatusLabel, BorderLayout.SOUTH);
+        top.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+
+        panel.add(top, BorderLayout.NORTH);
         panel.add(new JScrollPane(pluginsTable), BorderLayout.CENTER);
         return panel;
     }
@@ -564,11 +602,12 @@ public final class SwingWorkbenchLauncher {
 
     private void installSelectedPlugin() {
         int selectedRow = pluginsTable.getSelectedRow();
-        if (selectedRow < 0 || selectedRow >= currentPlugins.size()) {
+        int modelRow = selectedRow >= 0 ? pluginsTable.convertRowIndexToModel(selectedRow) : -1;
+        if (modelRow < 0 || modelRow >= currentPlugins.size()) {
             JOptionPane.showMessageDialog(frame, "Select a tool first.");
             return;
         }
-        ApiModels.PluginDescriptor plugin = currentPlugins.get(selectedRow);
+        ApiModels.PluginDescriptor plugin = currentPlugins.get(modelRow);
         runBackground("Installing " + plugin.metadata().displayName(), () -> {
             service.installTool(plugin.metadata().name());
             return plugin.metadata().displayName();
@@ -658,6 +697,7 @@ public final class SwingWorkbenchLauncher {
                 finding.title(),
                 finding.location() != null ? finding.location().path() + ":" + finding.location().line() : "n/a"
         }));
+        applyFindingsFilter();
 
         dependenciesModel.setRowCount(0);
         currentDependencies.forEach(node -> dependenciesModel.addRow(new Object[]{
@@ -699,6 +739,7 @@ public final class SwingWorkbenchLauncher {
                 plugin.available() ? "Installed" : "Missing",
                 plugin.binaryStatus() != null ? plugin.binaryStatus().version() : "n/a"
         }));
+        applyPluginsFilter();
 
         if (activeScan != null && activeScan.summary() != null) {
             scoreLabel.setText("Score: " + activeScan.summary().score());
@@ -761,10 +802,11 @@ public final class SwingWorkbenchLauncher {
             return;
         }
         int selectedRow = scansTable.getSelectedRow();
-        if (selectedRow < 0 || selectedRow >= snapshot.recentScans().size()) {
+        int modelRow = selectedRow >= 0 ? scansTable.convertRowIndexToModel(selectedRow) : -1;
+        if (modelRow < 0 || modelRow >= snapshot.recentScans().size()) {
             return;
         }
-        snapshot = snapshot.withActiveScan(snapshot.recentScans().get(selectedRow));
+        snapshot = snapshot.withActiveScan(snapshot.recentScans().get(modelRow));
         applySnapshot(snapshot);
         appendConsole("Loaded historical scan " + snapshot.activeScan().scanId());
     }
@@ -774,10 +816,11 @@ public final class SwingWorkbenchLauncher {
             return;
         }
         int selectedRow = findingsTable.getSelectedRow();
-        if (selectedRow < 0 || selectedRow >= currentFindings.size()) {
+        int modelRow = selectedRow >= 0 ? findingsTable.convertRowIndexToModel(selectedRow) : -1;
+        if (modelRow < 0 || modelRow >= currentFindings.size()) {
             return;
         }
-        ApiModels.Finding finding = currentFindings.get(selectedRow);
+        ApiModels.Finding finding = currentFindings.get(modelRow);
         inspectorArea.setText(WorkbenchText.formatFindingDetails(finding));
         sourceArea.setText(LocalFilePreviewer.sourcePreview(selectedRepository, finding));
     }
@@ -797,11 +840,12 @@ public final class SwingWorkbenchLauncher {
             return;
         }
         int selectedRow = dependenciesTable.getSelectedRow();
-        if (selectedRow < 0 || selectedRow >= currentDependencies.size()) {
+        int modelRow = selectedRow >= 0 ? dependenciesTable.convertRowIndexToModel(selectedRow) : -1;
+        if (modelRow < 0 || modelRow >= currentDependencies.size()) {
             return;
         }
         inspectorArea.setText(WorkbenchText.formatDependencyDetails(
-                currentDependencies.get(selectedRow),
+                currentDependencies.get(modelRow),
                 snapshot != null ? snapshot.activeScan() : null
         ));
         sourceArea.setText("Dependency intelligence is derived from SBOM and dependency graph data.");
@@ -812,11 +856,52 @@ public final class SwingWorkbenchLauncher {
             return;
         }
         int selectedRow = pluginsTable.getSelectedRow();
-        if (selectedRow < 0 || selectedRow >= currentPlugins.size()) {
+        int modelRow = selectedRow >= 0 ? pluginsTable.convertRowIndexToModel(selectedRow) : -1;
+        if (modelRow < 0 || modelRow >= currentPlugins.size()) {
             return;
         }
-        inspectorArea.setText(WorkbenchText.formatPluginDetails(currentPlugins.get(selectedRow)));
+        inspectorArea.setText(WorkbenchText.formatPluginDetails(currentPlugins.get(modelRow)));
         sourceArea.setText("Tool runtimes do not have source previews.");
+    }
+
+    private void applyFindingsFilter() {
+        applyTableFilter(findingsSorter, findingsFilterField != null ? findingsFilterField.getText() : null);
+        if (findingsSummaryStatusLabel != null) {
+            findingsSummaryStatusLabel.setText("Visible findings: " + findingsTable.getRowCount() + " of " + currentFindings.size());
+        }
+    }
+
+    private void applyPluginsFilter() {
+        applyTableFilter(pluginsSorter, pluginsFilterField != null ? pluginsFilterField.getText() : null);
+        if (runtimeSummaryStatusLabel != null) {
+            long installed = currentPlugins.stream().filter(ApiModels.PluginDescriptor::available).count();
+            runtimeSummaryStatusLabel.setText(
+                    "Runtime inventory: " + pluginsTable.getRowCount() + " visible of " + currentPlugins.size() + " | Installed " + installed
+            );
+        }
+    }
+
+    private void applyTableFilter(TableRowSorter<DefaultTableModel> sorter, String query) {
+        if (sorter == null) {
+            return;
+        }
+        String normalized = query == null ? "" : query.trim().toLowerCase();
+        if (normalized.isBlank()) {
+            sorter.setRowFilter(null);
+            return;
+        }
+        sorter.setRowFilter(new RowFilter<>() {
+            @Override
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                for (int column = 0; column < entry.getValueCount(); column++) {
+                    Object value = entry.getValue(column);
+                    if (value != null && value.toString().toLowerCase().contains(normalized)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
     }
 
     private DefaultTreeModel buildNavigationModel() {
@@ -1010,6 +1095,28 @@ public final class SwingWorkbenchLauncher {
         table.setAutoCreateRowSorter(true);
         table.setShowVerticalLines(false);
         table.setShowHorizontalLines(true);
+    }
+
+    private void installTextChangeListener(JTextField field, Runnable action) {
+        if (field == null) {
+            return;
+        }
+        field.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                action.run();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                action.run();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                action.run();
+            }
+        });
     }
 
     private <T> void runBackground(String activity, Callable<T> task, Consumer<T> onSuccess) {

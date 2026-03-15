@@ -97,6 +97,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private ListView<ApiModels.PluginDescriptor> pluginsList;
     private TextField findingFilterField;
     private TextField pluginFilterField;
+    private Label findingsSummaryLabel;
+    private Label runtimeSummaryLabel;
     private Label reportFolderLabel;
     private Label latestArtifactLabel;
     private Label generatedReportsLabel;
@@ -360,7 +362,23 @@ public final class JavaFxWorkbenchLauncher extends Application {
             @Override
             protected void updateItem(ApiModels.ScanResult item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.startedAt() + " | " + item.status() + " | " + item.repositoryPath());
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    return;
+                }
+                String score = item.summary() != null && item.summary().score() != null
+                        ? String.format("%.2f", item.summary().score())
+                        : "--";
+                String findings = item.summary() != null && item.summary().totalFindings() != null
+                        ? item.summary().totalFindings().toString()
+                        : "0";
+                setText(null);
+                setGraphic(richCell(
+                        item.status() + " | " + item.startedAt(),
+                        item.repositoryPath(),
+                        "Score " + score + " | Findings " + findings
+                ));
             }
         });
         scansList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
@@ -391,12 +409,30 @@ public final class JavaFxWorkbenchLauncher extends Application {
         findingFilterField = new TextField();
         findingFilterField.setPromptText("Filter findings by severity, tool, title, or package");
         findingFilterField.textProperty().addListener((obs, oldValue, newValue) -> applyFindingFilter());
+        findingsSummaryLabel = new Label("Visible findings: 0");
+        findingsSummaryLabel.getStyleClass().add("status-line");
         findingsList = new ListView<>();
         findingsList.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(ApiModels.Finding item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : "[" + item.severity() + "] " + item.title());
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    return;
+                }
+                String location = item.location() != null && item.location().path() != null
+                        ? item.location().path() + (item.location().line() != null ? ":" + item.location().line() : "")
+                        : "No file evidence";
+                String packageLabel = item.packageName() != null && !item.packageName().isBlank()
+                        ? item.packageName() + (item.packageVersion() != null && !item.packageVersion().isBlank() ? "@" + item.packageVersion() : "")
+                        : "No package evidence";
+                setText(null);
+                setGraphic(richCell(
+                        "[" + item.severity() + "] " + item.title(),
+                        item.sourceTool() + " | " + item.category(),
+                        location + " | " + packageLabel
+                ));
             }
         });
         findingsList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
@@ -406,7 +442,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
             inspectorArea.setText(WorkbenchText.formatFindingDetails(newValue));
             sourceArea.setText(LocalFilePreviewer.sourcePreview(selectedRepository, newValue));
         });
-        VBox content = new VBox(12, labeledSection("Findings"), findingFilterField, findingsList);
+        VBox content = new VBox(12, labeledSection("Findings"), findingFilterField, findingsSummaryLabel, findingsList);
         content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(findingsList, Priority.ALWAYS);
@@ -421,9 +457,17 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
+                    setGraphic(null);
                     return;
                 }
-                setText(item.id() + " | " + item.ecosystem() + " | " + (item.version() == null ? "n/a" : item.version()));
+                String directness = Boolean.TRUE.equals(item.direct()) ? "Direct dependency" : "Transitive dependency";
+                String dependencyCount = item.dependencies() == null ? "0 linked nodes" : item.dependencies().size() + " linked nodes";
+                setText(null);
+                setGraphic(richCell(
+                        item.id() + " | " + (item.version() == null ? "n/a" : item.version()),
+                        item.ecosystem(),
+                        directness + " | " + dependencyCount
+                ));
             }
         });
         dependenciesList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
@@ -542,12 +586,27 @@ public final class JavaFxWorkbenchLauncher extends Application {
         pluginFilterField = new TextField();
         pluginFilterField.setPromptText("Filter tools by name, category, version, or install state");
         pluginFilterField.textProperty().addListener((obs, oldValue, newValue) -> applyPluginFilter());
+        runtimeSummaryLabel = new Label("Runtime inventory: 0 tools");
+        runtimeSummaryLabel.getStyleClass().add("status-line");
         pluginsList = new ListView<>();
         pluginsList.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(ApiModels.PluginDescriptor item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.metadata().displayName() + " | " + (item.available() ? "Installed" : "Missing"));
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    return;
+                }
+                String version = item.binaryStatus() != null && item.binaryStatus().version() != null
+                        ? item.binaryStatus().version()
+                        : "n/a";
+                setText(null);
+                setGraphic(richCell(
+                        item.metadata().displayName() + " | " + (item.available() ? "Installed" : "Missing"),
+                        item.metadata().category() + " | " + item.metadata().installStrategy(),
+                        "Version " + version
+                ));
             }
         });
         pluginsList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
@@ -558,7 +617,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
             sourceArea.setText("Tool runtimes do not have source previews.");
         });
         Button installButton = primaryActionButton("Install Selected", this::installSelectedPlugin);
-        VBox content = new VBox(12, installButton, pluginFilterField, pluginsList);
+        VBox content = new VBox(12, installButton, pluginFilterField, runtimeSummaryLabel, pluginsList);
         content.getStyleClass().add("workspace-pane");
         content.setPadding(new Insets(12));
         VBox.setVgrow(pluginsList, Priority.ALWAYS);
@@ -916,11 +975,16 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 : "";
         if (query.isBlank()) {
             findingsList.setItems(FXCollections.observableArrayList(currentFindings));
+            if (findingsSummaryLabel != null) {
+                findingsSummaryLabel.setText("Visible findings: " + currentFindings.size() + " of " + currentFindings.size());
+            }
             return;
         }
-        findingsList.setItems(FXCollections.observableArrayList(
-                currentFindings.stream().filter(finding -> matchesFindingQuery(finding, query)).toList()
-        ));
+        List<ApiModels.Finding> filtered = currentFindings.stream().filter(finding -> matchesFindingQuery(finding, query)).toList();
+        findingsList.setItems(FXCollections.observableArrayList(filtered));
+        if (findingsSummaryLabel != null) {
+            findingsSummaryLabel.setText("Visible findings: " + filtered.size() + " of " + currentFindings.size());
+        }
     }
 
     private void applyPluginFilter() {
@@ -929,11 +993,18 @@ public final class JavaFxWorkbenchLauncher extends Application {
                 : "";
         if (query.isBlank()) {
             pluginsList.setItems(FXCollections.observableArrayList(currentPlugins));
+            if (runtimeSummaryLabel != null) {
+                long installed = currentPlugins.stream().filter(ApiModels.PluginDescriptor::available).count();
+                runtimeSummaryLabel.setText("Runtime inventory: " + currentPlugins.size() + " tools | Installed " + installed);
+            }
             return;
         }
-        pluginsList.setItems(FXCollections.observableArrayList(
-                currentPlugins.stream().filter(plugin -> matchesPluginQuery(plugin, query)).toList()
-        ));
+        List<ApiModels.PluginDescriptor> filtered = currentPlugins.stream().filter(plugin -> matchesPluginQuery(plugin, query)).toList();
+        pluginsList.setItems(FXCollections.observableArrayList(filtered));
+        if (runtimeSummaryLabel != null) {
+            long installed = filtered.stream().filter(ApiModels.PluginDescriptor::available).count();
+            runtimeSummaryLabel.setText("Runtime inventory: " + filtered.size() + " visible of " + currentPlugins.size() + " | Installed " + installed);
+        }
     }
 
     private void rebuildReportProfiles(List<ApiModels.ReportProfileDefinition> profiles) {
@@ -1085,6 +1156,21 @@ public final class JavaFxWorkbenchLauncher extends Application {
         valueLabel.getStyleClass().add("header-metric-value");
         VBox card = new VBox(2, titleLabel, valueLabel);
         card.getStyleClass().add("header-metric-card");
+        return card;
+    }
+
+    private VBox richCell(String primaryText, String secondaryText, String tertiaryText) {
+        Label primary = new Label(primaryText);
+        primary.getStyleClass().add("artifact-primary");
+        primary.setWrapText(true);
+        Label secondary = new Label(secondaryText);
+        secondary.getStyleClass().add("artifact-secondary");
+        secondary.setWrapText(true);
+        Label tertiary = new Label(tertiaryText);
+        tertiary.getStyleClass().addAll("artifact-secondary", "list-tertiary");
+        tertiary.setWrapText(true);
+        VBox card = new VBox(3, primary, secondary, tertiary);
+        card.getStyleClass().add("artifact-cell");
         return card;
     }
 

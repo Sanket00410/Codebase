@@ -328,6 +328,10 @@
     -fx-text-fill: #8fa4ca;
 }
 
+.list-tertiary {
+    -fx-text-fill: #6f88b3;
+}
+
 .metrics-flow,
 .actions-flow {
     -fx-padding: 0 0 4 0;
