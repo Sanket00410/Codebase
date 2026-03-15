@@ -18,6 +18,15 @@ def _default_data_dir() -> Path:
     return (Path.home() / ".code-base-scanner").resolve()
 
 
+def _default_reports_dir() -> Path:
+    override = os.getenv("SCANNER_PLATFORM_REPORTS_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    documents_dir = (Path.home() / "Documents").resolve()
+    base_dir = documents_dir if documents_dir.exists() else Path.home().resolve()
+    return (base_dir / "Code Base Scanner Reports").resolve()
+
+
 @dataclass(slots=True)
 class Settings:
     app_name: str = "Code Base Scanner"
@@ -63,10 +72,7 @@ class Settings:
 
     @property
     def reports_dir(self) -> Path:
-        override = os.getenv("SCANNER_PLATFORM_REPORTS_DIR")
-        if override:
-            return Path(override).expanduser().resolve()
-        return self.data_dir / "reports"
+        return _default_reports_dir()
 
     @property
     def db_path(self) -> Path:

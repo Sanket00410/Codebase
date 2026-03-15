@@ -16,24 +16,107 @@
         --medium: #9d7a00;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; background: radial-gradient(circle at top right, #dbeafe, transparent 24%), var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
-      main { max-width: 1100px; margin: 0 auto; padding: 28px; }
-      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 24px; box-shadow: 0 14px 36px rgba(21, 33, 53, 0.08); margin-bottom: 18px; }
-      .hero { display: grid; grid-template-columns: 1.9fr 1fr; gap: 20px; }
-      .eyebrow { display: inline-block; margin-bottom: 12px; color: var(--muted); letter-spacing: 0.14em; font-size: 12px; text-transform: uppercase; }
-      .score { width: 146px; height: 146px; border-radius: 50%; background: linear-gradient(135deg, var(--navy), #3d6486); color: white; display: flex; align-items: center; justify-content: center; font-size: 46px; font-weight: 800; }
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top right, rgba(173, 216, 255, 0.4), transparent 24%), var(--bg);
+        color: var(--ink);
+        font: 15px/1.58 "Segoe UI", Arial, sans-serif;
+      }
+      main { max-width: 1140px; margin: 0 auto; padding: 28px; }
+      .hero, .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 14px 36px rgba(21, 33, 53, 0.08);
+        margin-bottom: 18px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.9fr 1fr;
+        gap: 20px;
+      }
+      .eyebrow {
+        display: inline-block;
+        margin-bottom: 12px;
+        color: var(--muted);
+        letter-spacing: 0.16em;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
       h1, h2, h3, p { margin-top: 0; }
-      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-      .metric, .risk-card, .summary-card { border: 1px solid var(--line); border-radius: 16px; background: #f8fbfe; padding: 16px; }
-      .metric strong { display: block; margin-top: 8px; font-size: 30px; }
-      .risk-grid { display: grid; gap: 12px; }
-      .risk-card { position: relative; padding-left: 18px; }
-      .risk-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; border-radius: 16px 0 0 16px; background: var(--critical); }
+      .score {
+        width: 146px;
+        height: 146px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--navy), #3d6486);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 46px;
+        font-weight: 800;
+      }
+      .grid, .owasp-grid, .risk-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .owasp-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .metric, .summary-card, .owasp-card, .risk-card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #f8fbfe;
+        padding: 16px;
+      }
+      .metric strong, .owasp-card strong { display: block; margin-top: 8px; }
+      .metric strong { font-size: 30px; }
+      .owasp-card strong { font-size: 28px; }
+      .risk-card {
+        position: relative;
+        padding-left: 18px;
+      }
+      .risk-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 6px;
+        border-radius: 16px 0 0 16px;
+        background: var(--critical);
+      }
       .risk-card.high::before { background: var(--high); }
       .risk-card.medium::before { background: var(--medium); }
-      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
-      .chip { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: #eaf1f8; color: #244561; font-size: 12px; }
-      .code { margin-top: 12px; padding: 14px; border-radius: 14px; background: #0f1722; color: #dfe8f3; white-space: pre-wrap; font: 12px/1.55 Consolas, monospace; overflow: auto; }
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 0;
+      }
+      .chip {
+        display: inline-flex;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: #eaf1f8;
+        color: #244561;
+        font-size: 12px;
+      }
+      .code {
+        margin-top: 12px;
+        padding: 14px;
+        border-radius: 14px;
+        background: #0f1722;
+        color: #dfe8f3;
+        white-space: pre-wrap;
+        font: 12px/1.55 Consolas, monospace;
+        overflow: auto;
+      }
+      @media (max-width: 1050px) {
+        .hero { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -43,6 +126,7 @@
           <span class="eyebrow">Executive Summary</span>
           <h1>{{ report.executive_summary.headline }}</h1>
           <p>{{ report.scan.repository_path }}</p>
+          <p>Bundle {{ report.report_bundle.name }} &middot; {{ report.report_bundle.output_dir }}</p>
           <div class="grid">
             <div class="metric"><span>Security score</span><strong>{{ report.summary.security_score }}</strong></div>
             <div class="metric"><span>Total findings</span><strong>{{ report.summary.total_findings }}</strong></div>
@@ -55,6 +139,22 @@
         </div>
       </section>
 
+      {% if report.summary.owasp_top_10_distribution %}
+        <section class="panel">
+          <span class="eyebrow">OWASP Top 10</span>
+          <h2>Mapped exposure areas</h2>
+          <div class="owasp-grid">
+            {% for item in report.summary.owasp_top_10_distribution %}
+              <div class="owasp-card">
+                <span>{{ item.id }}</span>
+                <strong>{{ item.count }}</strong>
+                <div style="margin-top:8px; color: var(--muted);">{{ item.title }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
       <section class="panel">
         <span class="eyebrow">Leadership view</span>
         <h2>Top risks requiring action</h2>
@@ -62,9 +162,10 @@
           {% for risk in report.executive_summary.top_risks %}
             <article class="risk-card {{ risk.severity }}">
               <h3>{{ risk.title }}</h3>
-              <p>{{ risk.severity|upper }} via {{ risk.tool }}{% if risk.location and risk.location != "n/a" %} · {{ risk.location }}{% endif %}</p>
+              <p>{{ risk.severity|upper }} via {{ risk.tool }}{% if risk.location and risk.location != "n/a" %} &middot; {{ risk.location }}{% endif %}</p>
               <div class="chip-row">
                 {% if risk.package %}<span class="chip">Dependency/package evidence: {{ risk.package }}</span>{% endif %}
+                {% if risk.owasp %}<span class="chip">{{ risk.owasp }}</span>{% endif %}
               </div>
             </article>
           {% endfor %}
@@ -92,6 +193,7 @@
                 <h3>{{ finding.title }}</h3>
                 <p>File/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</p>
                 <div class="chip-row">
+                  <span class="chip">OWASP: {{ finding.owasp_labels|join(", ") if finding.owasp_labels else "none" }}</span>
                   <span class="chip">CVE: {{ finding.cve_ids|join(", ") if finding.cve_ids else "none" }}</span>
                   <span class="chip">CWE: {{ finding.cwe_ids|join(", ") if finding.cwe_ids else "none" }}</span>
                   <span class="chip">CVSS: {{ finding.cvss_score if finding.cvss_score is not none else "n/a" }}</span>

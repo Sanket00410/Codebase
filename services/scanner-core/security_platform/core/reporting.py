@@ -126,6 +126,53 @@ _PROFILE_ALIAS_MAP = {
     "html": "modern-report",
 }
 
+_OWASP_TOP_10 = {
+    "A01:2021": "Broken Access Control",
+    "A02:2021": "Cryptographic Failures",
+    "A03:2021": "Injection",
+    "A04:2021": "Insecure Design",
+    "A05:2021": "Security Misconfiguration",
+    "A06:2021": "Vulnerable and Outdated Components",
+    "A07:2021": "Identification and Authentication Failures",
+    "A08:2021": "Software and Data Integrity Failures",
+    "A09:2021": "Security Logging and Monitoring Failures",
+    "A10:2021": "Server-Side Request Forgery",
+}
+
+_OWASP_CWE_MAP: dict[str, set[int]] = {
+    "A01:2021": {
+        22, 23, 35, 59, 73, 99, 200, 201, 219, 264, 269, 275, 276, 284, 285, 352, 359, 377, 402,
+        425, 441, 497, 538, 540, 548, 552, 566, 601, 639, 651, 668, 706, 862, 863, 913, 922, 1275,
+    },
+    "A02:2021": {
+        259, 261, 295, 311, 312, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331,
+        335, 338, 347, 522, 523, 614, 757, 759, 760, 780, 916,
+    },
+    "A03:2021": {
+        74, 77, 78, 79, 80, 83, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 98, 99, 100, 113, 116, 184,
+        643, 917,
+    },
+    "A04:2021": {
+        209, 256, 266, 270, 280, 436, 501, 522, 602, 640, 656, 657, 799, 807, 840, 841, 927, 1021,
+    },
+    "A05:2021": {16, 611, 614, 776, 942, 1004, 1174, 1188},
+    "A07:2021": {
+        287, 288, 290, 294, 295, 297, 300, 302, 303, 304, 306, 307, 346, 384, 521, 522, 523, 613,
+        620, 640, 798,
+    },
+    "A08:2021": {345, 347, 353, 354, 494, 502, 565, 829, 830, 915},
+    "A09:2021": {117, 223, 532, 778, 779},
+    "A10:2021": {918},
+}
+
+_OWASP_CATEGORY_HINTS: dict[str, str] = {
+    "sca": "A06:2021",
+    "sbom": "A06:2021",
+    "iac": "A05:2021",
+    "container": "A05:2021",
+    "ci_cd": "A05:2021",
+}
+
 
 def list_report_profiles() -> list[ReportProfileDefinition]:
     return [
@@ -315,6 +362,7 @@ def _build_report_document(
 ) -> dict[str, Any]:
     include_rich_evidence = profile.includes_rich_evidence
     findings = [_serialize_finding(scan_result, finding, include_rich_evidence) for finding in scan_result.findings]
+    owasp_distribution = _owasp_distribution(findings)
     raw_artifacts = [
         {
             "kind": artifact.kind,
@@ -354,6 +402,7 @@ def _build_report_document(
             "total_findings": scan_result.summary.total_findings,
             "severity_distribution": scan_result.summary.by_severity,
             "category_distribution": scan_result.summary.by_category,
+            "owasp_top_10_distribution": owasp_distribution,
             "tools_run": scan_result.summary.tools_run,
             "languages": scan_result.repository_signal.languages,
             "dependency_count": len(scan_result.dependency_graph.nodes),
@@ -366,6 +415,7 @@ def _build_report_document(
             "headline": _headline(scan_result),
             "top_risks": _top_risks(findings),
             "critical_and_high": len(critical_findings),
+            "owasp_top_10_focus": owasp_distribution[:5],
             "repository_shape": {
                 "total_files": scan_result.repository_signal.total_files,
                 "total_bytes": scan_result.repository_signal.total_bytes,
@@ -404,6 +454,7 @@ def _build_report_document(
 
 def _serialize_finding(scan_result: ScanResult, finding: NormalizedFinding, include_rich_evidence: bool) -> dict[str, Any]:
     location = _serialize_location(finding.location)
+    owasp_top_10 = _owasp_top_10_for_finding(finding)
     record: dict[str, Any] = {
         "finding_id": finding.finding_id,
         "fingerprint": finding.fingerprint,
@@ -415,6 +466,8 @@ def _serialize_finding(scan_result: ScanResult, finding: NormalizedFinding, incl
         "rule_id": finding.rule_id,
         "confidence": finding.confidence,
         "references": finding.references,
+        "owasp_top_10": owasp_top_10,
+        "owasp_labels": [entry["label"] for entry in owasp_top_10],
     }
 
     if location:
@@ -446,6 +499,7 @@ def _serialize_finding(scan_result: ScanResult, finding: NormalizedFinding, incl
                 "cwe_ids": finding.cwe_ids,
                 "cvss_score": finding.cvss_score,
             },
+            "owasp_top_10": owasp_top_10,
             "remediation": finding.remediation or finding.ai_triage.get("remediation"),
             "ai_triage": finding.ai_triage,
             "raw_scanner_output": _tool_output_for_finding(scan_result, finding),
@@ -493,6 +547,99 @@ def _dependency_name(node) -> str:
     if node.version:
         return f"{node.id}@{node.version}"
     return node.id
+
+
+def _owasp_top_10_for_finding(finding: NormalizedFinding) -> list[dict[str, str]]:
+    matches: list[str] = []
+    for cwe_id in finding.cwe_ids:
+        normalized_cwe = _normalize_cwe_id(cwe_id)
+        if normalized_cwe is None:
+            continue
+        for owasp_id, cwe_ids in _OWASP_CWE_MAP.items():
+            if normalized_cwe in cwe_ids and owasp_id not in matches:
+                matches.append(owasp_id)
+
+    fallback = _fallback_owasp_mapping(finding)
+    if fallback and fallback not in matches:
+        matches.append(fallback)
+
+    return [
+        {
+            "id": owasp_id,
+            "title": _OWASP_TOP_10[owasp_id],
+            "label": f"{owasp_id} - {_OWASP_TOP_10[owasp_id]}",
+        }
+        for owasp_id in matches
+    ]
+
+
+def _normalize_cwe_id(value: str | None) -> int | None:
+    if not value:
+        return None
+    match = re.search(r"(\d+)", value)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _fallback_owasp_mapping(finding: NormalizedFinding) -> str | None:
+    category_value = finding.category.value if hasattr(finding.category, "value") else str(finding.category)
+    if category_value in _OWASP_CATEGORY_HINTS:
+        return _OWASP_CATEGORY_HINTS[category_value]
+
+    text = " ".join(
+        filter(
+            None,
+            [
+                finding.title,
+                finding.description,
+                finding.rule_id,
+                category_value,
+                finding.package_name,
+                " ".join(finding.tags),
+            ],
+        )
+    ).lower()
+
+    if finding.package_name and (finding.cve_ids or category_value in {"sca", "sbom"}):
+        return "A06:2021"
+    if "ssrf" in text or "server-side request forgery" in text:
+        return "A10:2021"
+    if any(keyword in text for keyword in ("sql injection", "command injection", "template injection", "xss", "cross-site scripting", "injection", "deserialization", "regex injection")):
+        return "A03:2021"
+    if any(keyword in text for keyword in ("access control", "authorization", "idor", "path traversal", "directory traversal", "csrf", "cross-site request forgery")):
+        return "A01:2021"
+    if any(keyword in text for keyword in ("weak crypto", "cryptographic", "plaintext", "cleartext", "tls", "certificate", "hardcoded secret", "hard-coded secret", "hardcoded password")):
+        return "A02:2021"
+    if any(keyword in text for keyword in ("auth", "authentication", "session", "credential", "password reuse", "bruteforce", "brute force")):
+        return "A07:2021"
+    if any(keyword in text for keyword in ("misconfig", "security header", "default credentials", "directory listing", "exposed service", "debug mode")):
+        return "A05:2021"
+    if any(keyword in text for keyword in ("signature", "supply chain", "dependency confusion", "untrusted update", "deserialization integrity")):
+        return "A08:2021"
+    if any(keyword in text for keyword in ("logging", "audit trail", "monitoring", "log injection")):
+        return "A09:2021"
+    if any(keyword in text for keyword in ("design flaw", "business logic", "insecure design")):
+        return "A04:2021"
+    return None
+
+
+def _owasp_distribution(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for finding in findings:
+        for item in finding.get("owasp_top_10", []):
+            owasp_id = item["id"]
+            counts[owasp_id] = counts.get(owasp_id, 0) + 1
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [
+        {
+            "id": owasp_id,
+            "title": _OWASP_TOP_10[owasp_id],
+            "label": f"{owasp_id} - {_OWASP_TOP_10[owasp_id]}",
+            "count": count,
+        }
+        for owasp_id, count in ordered
+    ]
 
 
 def _dependency_node_record(node) -> dict[str, Any]:
@@ -630,6 +777,7 @@ def _top_risks(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "tool": finding["source_tool"],
             "location": _location_label(finding.get("location")),
             "package": finding.get("package", {}).get("name") if finding.get("package") else None,
+            "owasp": ", ".join(finding.get("owasp_labels") or []),
         }
         for finding in ordered[:5]
     ]
@@ -689,6 +837,10 @@ def _to_markdown(document: dict[str, Any], profile: ReportProfileSpec) -> str:
     for severity, count in summary["severity_distribution"].items():
         lines.append(f"- {severity}: {count}")
 
+    if summary["owasp_top_10_distribution"]:
+        lines.extend(["", "## OWASP Top 10 Mapping"])
+        for item in summary["owasp_top_10_distribution"]:
+            lines.append(f"- {item['label']}: {item['count']}")
     lines.extend(["", "## Findings"])
     for finding in document["findings"]:
         lines.extend(
@@ -697,6 +849,7 @@ def _to_markdown(document: dict[str, Any], profile: ReportProfileSpec) -> str:
                 f"- Severity: `{finding['severity']}`",
                 f"- Category: `{finding['category']}`",
                 f"- Tool: `{finding['source_tool']}`",
+                f"- OWASP Top 10: `{', '.join(finding.get('owasp_labels') or ['none'])}`",
                 f"- File/line evidence: `{_location_label(finding.get('location'))}`",
                 f"- Rule: `{finding.get('rule_id') or finding['fingerprint']}`",
                 f"- Description: {finding['description']}",
@@ -861,6 +1014,30 @@ def _to_pdf(document: dict[str, Any], profile: ReportProfileSpec, path: Path) ->
     )
     story.append(severity_table)
     story.append(Spacer(1, 10))
+    if document["summary"]["owasp_top_10_distribution"]:
+        story.append(Paragraph("OWASP Top 10 Mapping", section_style))
+        story.append(Spacer(1, 6))
+        owasp_rows = [["OWASP Category", "Count"]]
+        for item in document["summary"]["owasp_top_10_distribution"]:
+            owasp_rows.append([item["label"], str(item["count"])])
+        owasp_table = Table(owasp_rows, colWidths=[360, 80], hAlign="LEFT")
+        owasp_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1d3557")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f8fbff")),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#c9d7e5")),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d6e0eb")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        story.append(owasp_table)
+        story.append(Spacer(1, 10))
     story.append(Paragraph("Findings", section_style))
     story.append(Spacer(1, 6))
 
@@ -874,6 +1051,7 @@ def _to_pdf(document: dict[str, Any], profile: ReportProfileSpec, path: Path) ->
         )
         story.append(Paragraph(finding["description"], body_style))
         story.append(Paragraph(f"Tool: {finding['source_tool']} | Category: {finding['category']}", body_style))
+        story.append(Paragraph(f"OWASP Top 10: {', '.join(finding.get('owasp_labels') or ['none'])}", body_style))
         story.append(Paragraph(f"File/line evidence: {_location_label(finding.get('location'))}", body_style))
         if finding.get("package"):
             package = finding["package"]
@@ -943,6 +1121,12 @@ def _to_xml(document: dict[str, Any]) -> str:
     for severity, count in document["summary"]["severity_distribution"].items():
         item = ET.SubElement(severity_node, "severity", name=severity)
         item.text = _xml_safe_text(count)
+    if document["summary"]["owasp_top_10_distribution"]:
+        owasp_node = ET.SubElement(summary_node, "owasp-top-10-distribution")
+        for item in document["summary"]["owasp_top_10_distribution"]:
+            mapped = ET.SubElement(owasp_node, "owasp-category", id=item["id"])
+            ET.SubElement(mapped, "label").text = _xml_safe_text(item["label"])
+            ET.SubElement(mapped, "count").text = _xml_safe_text(item["count"])
 
     findings_node = ET.SubElement(root, "findings")
     for finding in document["findings"]:
@@ -971,6 +1155,11 @@ def _to_xml(document: dict[str, Any]) -> str:
             cwes_node = ET.SubElement(finding_node, "cwe-ids")
             for item in finding["cwe_ids"]:
                 ET.SubElement(cwes_node, "cwe").text = _xml_safe_text(item)
+        if finding.get("owasp_top_10"):
+            owasp_node = ET.SubElement(finding_node, "owasp-top-10")
+            for item in finding["owasp_top_10"]:
+                mapped = ET.SubElement(owasp_node, "category", id=item["id"])
+                mapped.text = _xml_safe_text(item["label"])
         if document["profile"]["includes_rich_evidence"]:
             rich = finding.get("rich_evidence", {})
             rich_node = ET.SubElement(finding_node, "rich-evidence")
@@ -1059,7 +1248,12 @@ def _to_sarif(scan_result: ScanResult, document: dict[str, Any], profile: Report
                 "name": finding.title,
                 "shortDescription": {"text": finding.title},
                 "help": {"text": finding.description},
-                "properties": {"tags": finding.tags, "cwe": finding.cwe_ids, "cve": finding.cve_ids},
+                "properties": {
+                    "tags": finding.tags,
+                    "cwe": finding.cwe_ids,
+                    "cve": finding.cve_ids,
+                    "owasp_top_10": record.get("owasp_labels", []),
+                },
             },
         )
         result: dict[str, Any] = {
@@ -1070,6 +1264,7 @@ def _to_sarif(scan_result: ScanResult, document: dict[str, Any], profile: Report
                 "tool": finding.source_tool,
                 "confidence": finding.confidence,
                 "category": finding.category.value,
+                "owasp_top_10": record.get("owasp_labels", []),
             },
             "partialFingerprints": {"primaryLocationLineHash": finding.fingerprint},
         }
@@ -1091,6 +1286,7 @@ def _to_sarif(scan_result: ScanResult, document: dict[str, Any], profile: Report
                     "fixed_version": finding.fixed_version,
                     "remediation": finding.remediation,
                     "ai_triage": finding.ai_triage,
+                    "owasp_top_10_detail": record.get("owasp_top_10", []),
                 }
             )
         results.append(result)
@@ -1105,6 +1301,7 @@ def _to_sarif(scan_result: ScanResult, document: dict[str, Any], profile: Report
                     "profile": document["profile"]["label"],
                     "includes_rich_evidence": profile.includes_rich_evidence,
                     "security_score": document["summary"]["security_score"],
+                    "owasp_top_10_distribution": document["summary"]["owasp_top_10_distribution"],
                 },
                 "results": results,
             }

@@ -47,10 +47,11 @@
     -fx-background-color: linear-gradient(to right, #111b2a, #152234);
     -fx-border-color: #22314d;
     -fx-border-width: 0 0 1 0;
+    -fx-effect: dropshadow(gaussian, rgba(5, 10, 18, 0.28), 22, 0.18, 0, 6);
 }
 
 .header-title {
-    -fx-font-size: 25px;
+    -fx-font-size: 26px;
     -fx-font-weight: 700;
 }
 
@@ -118,7 +119,7 @@
     -fx-background-color: linear-gradient(to bottom, #121c2c, #0f1724);
     -fx-border-color: #22314d;
     -fx-border-width: 0 0 1 0;
-    -fx-padding: 10 12 10 12;
+    -fx-padding: 10 14 10 14;
     -fx-hgap: 8px;
 }
 
@@ -217,6 +218,18 @@
     -fx-background-radius: 8px;
 }
 
+.workspace-pane,
+.timeline-pane {
+    -fx-background-color: linear-gradient(to bottom, rgba(15, 24, 38, 0.98), rgba(12, 19, 31, 0.98));
+    -fx-background-radius: 14px;
+    -fx-border-radius: 14px;
+    -fx-border-color: #22314d;
+}
+
+.workspace-pane {
+    -fx-padding: 14px;
+}
+
 .workspace-tabs > .tab-header-area > .headers-region > .tab,
 .inspector-tabs > .tab-header-area > .headers-region > .tab,
 .console-box .tab {
@@ -243,8 +256,12 @@
     -fx-font-weight: 600;
 }
 
-.workspace-pane {
+.workspace-tabs > .tab-content-area,
+.inspector-tabs > .tab-content-area,
+.console-box > .tab-content-area {
     -fx-background-color: transparent;
+    -fx-border-color: #22314d;
+    -fx-border-width: 1 0 0 0;
 }
 
 .report-left-column {
@@ -268,10 +285,11 @@
     -fx-background-radius: 12px;
     -fx-border-color: #22314d;
     -fx-border-radius: 12px;
+    -fx-padding: 6px;
 }
 
 .artifact-cell {
-    -fx-padding: 4 2 4 2;
+    -fx-padding: 6 4 6 4;
 }
 
 .artifact-primary {
@@ -288,6 +306,11 @@
 .metrics-flow,
 .actions-flow {
     -fx-padding: 0 0 4 0;
+}
+
+.actions-flow {
+    -fx-hgap: 8px;
+    -fx-vgap: 8px;
 }
 
 .status-line {
@@ -311,10 +334,14 @@
 
 .navigation-tree {
     -fx-padding: 6px;
+    -fx-background-color: linear-gradient(to bottom, rgba(15, 24, 38, 0.98), rgba(12, 19, 31, 0.98));
+    -fx-background-radius: 14px;
+    -fx-border-radius: 14px;
+    -fx-border-color: #22314d;
 }
 
 .timeline-pane {
-    -fx-padding: 2px;
+    -fx-padding: 10px;
 }
 
 .status-bar .label {
@@ -323,4 +350,10 @@
 
 .report-split > .split-pane-divider {
     -fx-background-color: #24344f;
+}
+
+.center-split,
+.content-split,
+.vertical-split {
+    -fx-background-color: transparent;
 }

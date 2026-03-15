@@ -11,48 +11,146 @@
         --ink: #172433;
         --muted: #5f6e82;
         --navy: #16324b;
-        --gold: #d9a441;
         --critical: #9f1d1d;
         --high: #b45309;
         --medium: #9a7600;
         --low: #25603d;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
-      main { max-width: 1240px; margin: 0 auto; padding: 28px; }
-      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: 0 14px 34px rgba(23, 36, 51, 0.08); margin-bottom: 18px; }
-      .hero-head { background: linear-gradient(135deg, var(--navy), #274f72); color: white; padding: 24px 26px; display: grid; grid-template-columns: 2fr 220px; gap: 20px; }
-      .hero-body, .panel-body { padding: 20px 24px; }
-      .eyebrow { display: inline-block; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: #adc3d8; }
-      .hero h1, .panel h2, .panel h3, p { margin-top: 0; }
-      .score-ring { width: 148px; height: 148px; border-radius: 50%; border: 10px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 44px; font-weight: 800; }
-      .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-      .metric { border: 1px solid var(--line); border-radius: 14px; background: #f8fbff; padding: 14px; }
-      .metric span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-      .metric strong { display: block; margin-top: 6px; font-size: 28px; }
-      .severity-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-      .severity-card { border-radius: 14px; padding: 14px; color: white; }
-      .severity-card strong { display: block; font-size: 28px; margin-top: 8px; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Segoe UI", Arial, sans-serif; }
+      main { max-width: 1260px; margin: 0 auto; padding: 28px; }
+      .hero, .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 14px 34px rgba(23, 36, 51, 0.08);
+        margin-bottom: 18px;
+      }
+      .hero-head {
+        background: linear-gradient(135deg, var(--navy), #294f72);
+        color: white;
+        padding: 26px;
+        display: grid;
+        grid-template-columns: 2fr 220px;
+        gap: 22px;
+      }
+      .hero-body, .panel-body { padding: 22px 24px; }
+      .eyebrow {
+        display: inline-block;
+        margin-bottom: 10px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: #b7cadf;
+      }
+      h1, h2, h3, p { margin-top: 0; }
+      .score-ring {
+        width: 148px;
+        height: 148px;
+        border-radius: 50%;
+        border: 10px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 44px;
+        font-weight: 800;
+      }
+      .metrics, .owasp-grid, .meta-grid {
+        display: grid;
+        gap: 14px;
+      }
+      .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .owasp-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .metric, .meta-card, .owasp-card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #f8fbff;
+        padding: 14px;
+      }
+      .metric span, .meta-card span, .owasp-card span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .metric strong, .meta-card strong, .owasp-card strong {
+        display: block;
+        margin-top: 6px;
+      }
+      .metric strong { font-size: 28px; }
+      .owasp-card strong { font-size: 30px; }
+      .severity-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .severity-card {
+        border-radius: 14px;
+        padding: 14px;
+        color: white;
+      }
+      .severity-card strong { display: block; margin-top: 8px; font-size: 28px; }
       .severity-card.critical { background: linear-gradient(135deg, #8f1919, #c23a3a); }
       .severity-card.high { background: linear-gradient(135deg, #a34905, #d97822); }
       .severity-card.medium { background: linear-gradient(135deg, #8f7300, #c9a11f); }
       .severity-card.low, .severity-card.info { background: linear-gradient(135deg, #21563f, #3b8b62); }
       .risk-list { display: grid; gap: 12px; }
-      .risk-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 220px; gap: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+      .risk-row {
+        display: grid;
+        grid-template-columns: 98px minmax(0, 1fr) 260px;
+        gap: 14px;
+        border-top: 1px solid var(--line);
+        padding-top: 14px;
+      }
       .risk-row:first-child { border-top: 0; padding-top: 0; }
-      .severity-pill { display: inline-flex; justify-content: center; align-items: center; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: #eef3f8; }
+      .severity-pill {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        background: #eef3f8;
+      }
       .severity-pill.critical { color: var(--critical); }
       .severity-pill.high { color: var(--high); }
       .severity-pill.medium { color: var(--medium); }
       .severity-pill.low, .severity-pill.info { color: var(--low); }
-      .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
-      .meta-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fbfcfe; }
-      .meta-card span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
-      .meta-card strong { display: block; margin-top: 6px; font-size: 14px; }
-      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
-      .chip { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: #edf3f8; color: #264561; font-size: 12px; }
-      .code { margin-top: 12px; padding: 14px; border-radius: 12px; background: #101a28; color: #e4edf8; white-space: pre-wrap; font: 12px/1.55 "IBM Plex Mono", Consolas, monospace; overflow: auto; }
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0 0;
+      }
+      .chip {
+        display: inline-flex;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: #edf3f8;
+        color: #264561;
+        font-size: 12px;
+      }
+      .code {
+        margin-top: 12px;
+        padding: 14px;
+        border-radius: 12px;
+        background: #101a28;
+        color: #e4edf8;
+        white-space: pre-wrap;
+        font: 12px/1.55 "IBM Plex Mono", Consolas, monospace;
+        overflow: auto;
+      }
       .summary-text { color: var(--muted); }
+      @media (max-width: 1120px) {
+        .hero-head { grid-template-columns: 1fr; }
+        .metrics, .severity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .risk-row { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -63,7 +161,8 @@
             <span class="eyebrow">Traditional Report</span>
             <h1>{{ report.executive_summary.headline }}</h1>
             <p>{{ report.scan.repository_path }}</p>
-            <p>Scan ID {{ report.scan.scan_id }}{% if report.scan.completed_at %} · Completed {{ report.scan.completed_at }}{% endif %}</p>
+            <p>Scan ID {{ report.scan.scan_id }} &middot; Completed {{ report.scan.completed_at or "n/a" }}</p>
+            <p>Bundle {{ report.report_bundle.name }} &middot; {{ report.report_bundle.output_dir }}</p>
           </div>
           <div style="display:flex;align-items:center;justify-content:center;">
             <div class="score-ring">{{ report.summary.security_score }}</div>
@@ -93,6 +192,23 @@
         </div>
       </section>
 
+      {% if report.summary.owasp_top_10_distribution %}
+        <section class="panel">
+          <div class="panel-body">
+            <h2>OWASP Top 10 Mapping</h2>
+            <div class="owasp-grid">
+              {% for item in report.summary.owasp_top_10_distribution %}
+                <div class="owasp-card">
+                  <span>{{ item.id }}</span>
+                  <strong>{{ item.count }}</strong>
+                  <div class="summary-text" style="margin-top:8px;">{{ item.title }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      {% endif %}
+
       <section class="panel">
         <div class="panel-body">
           <h2>Top Risks</h2>
@@ -102,7 +218,8 @@
                 <div><span class="severity-pill {{ risk.severity }}">{{ risk.severity }}</span></div>
                 <div>
                   <h3>{{ risk.title }}</h3>
-                  <p class="summary-text">{{ risk.tool }}{% if risk.location and risk.location != "n/a" %} · {{ risk.location }}{% endif %}</p>
+                  <p class="summary-text">{{ risk.tool }}{% if risk.location and risk.location != "n/a" %} &middot; {{ risk.location }}{% endif %}</p>
+                  {% if risk.owasp %}<div class="chip-row"><span class="chip">{{ risk.owasp }}</span></div>{% endif %}
                 </div>
                 <div class="meta-card">
                   <span>Dependency/Package Evidence</span>
@@ -129,6 +246,7 @@
                     <span class="chip">{{ finding.category }}</span>
                     <span class="chip">File/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</span>
                     {% if finding.package %}<span class="chip">Dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</span>{% endif %}
+                    <span class="chip">OWASP: {{ finding.owasp_labels|join(", ") if finding.owasp_labels else "none" }}</span>
                     <span class="chip">CVE: {{ finding.cve_ids|join(", ") if finding.cve_ids else "none" }}</span>
                     <span class="chip">CWE: {{ finding.cwe_ids|join(", ") if finding.cwe_ids else "none" }}</span>
                     <span class="chip">CVSS: {{ finding.cvss_score if finding.cvss_score is not none else "n/a" }}</span>
@@ -162,8 +280,8 @@
                     <strong>{{ (finding.confidence * 100)|round|int }}%</strong>
                   </div>
                   <div class="meta-card">
-                    <span>Media path</span>
-                    <strong>{{ finding.location.path if finding.location else "n/a" }}</strong>
+                    <span>Package Fix</span>
+                    <strong>{{ finding.package.fixed_version if finding.package and finding.package.fixed_version else "n/a" }}</strong>
                   </div>
                   <div class="meta-card">
                     <span>References</span>

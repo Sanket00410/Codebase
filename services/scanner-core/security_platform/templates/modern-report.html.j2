@@ -5,59 +5,174 @@
     <title>{{ report.profile.label|title }} - {{ report.scan.scan_id }}</title>
     <style>
       :root {
-        --bg: #f7f0e8;
-        --panel: rgba(255, 252, 246, 0.97);
+        --bg: #f5efe6;
+        --panel: rgba(255, 252, 247, 0.98);
         --line: #ddd3c2;
-        --ink: #132033;
-        --muted: #5a6780;
+        --ink: #142133;
+        --muted: #5b6780;
         --navy: #14304a;
-        --gold: #d9a744;
-        --critical: #9f1d1d;
+        --gold: #d4a446;
+        --critical: #971f1f;
         --high: #bc5b04;
         --medium: #9d7a00;
         --low: #226449;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: "IBM Plex Sans", "Segoe UI", sans-serif; background: radial-gradient(circle at top right, #f4d794, transparent 28%), radial-gradient(circle at left center, #cfe7fb, transparent 20%), var(--bg); color: var(--ink); }
-      main { max-width: 1280px; margin: 0 auto; padding: 30px; }
-      .hero, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 18px 40px rgba(19, 32, 51, 0.08); margin-bottom: 18px; overflow: hidden; }
-      .hero { display: grid; grid-template-columns: 1.8fr 1fr; }
-      .hero-copy { padding: 28px; }
-      .hero-side { padding: 28px; background: linear-gradient(180deg, rgba(20,48,74,0.98), rgba(34,72,103,0.98)); color: white; }
-      .eyebrow { display: inline-block; margin-bottom: 12px; color: var(--muted); letter-spacing: 0.14em; font-size: 12px; text-transform: uppercase; }
-      .hero .eyebrow { color: #afd0e8; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        font: 15px/1.58 "IBM Plex Sans", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(231, 192, 116, 0.45), transparent 24%),
+          radial-gradient(circle at left 18%, rgba(165, 205, 240, 0.34), transparent 16%),
+          var(--bg);
+      }
+      main { max-width: 1320px; margin: 0 auto; padding: 28px; }
+      .hero, .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: 0 18px 40px rgba(20, 33, 51, 0.08);
+        margin-bottom: 18px;
+        overflow: hidden;
+      }
+      .hero { display: grid; grid-template-columns: 1.9fr 1fr; }
+      .hero-copy { padding: 30px; }
+      .hero-side {
+        padding: 30px;
+        background: linear-gradient(180deg, rgba(20, 48, 74, 0.98), rgba(32, 66, 96, 0.98));
+        color: white;
+      }
+      .eyebrow {
+        display: inline-block;
+        margin-bottom: 12px;
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .hero-side .eyebrow { color: #b8d7ea; }
       h1, h2, h3, p { margin-top: 0; }
-      .score { width: 146px; height: 146px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), #f5d78f); color: #1d2127; display: flex; align-items: center; justify-content: center; font-size: 46px; font-weight: 800; margin-top: 8px; }
-      .hero-grid, .stats-grid, .findings-grid, .execution-grid { display: grid; gap: 14px; }
-      .hero-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 18px; }
-      .stat, .finding-card, .tool-card, .summary-box { border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.72); padding: 16px; }
-      .stat strong { display: block; margin-top: 8px; font-size: 28px; }
-      .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .severity-band { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-      .severity-block { padding: 14px; border-radius: 16px; color: white; }
-      .severity-block strong { display: block; margin-top: 8px; font-size: 30px; }
-      .severity-block.critical { background: linear-gradient(135deg, #981b1b, #c83f3f); }
-      .severity-block.high { background: linear-gradient(135deg, #a44d07, #d97d2f); }
-      .severity-block.medium { background: linear-gradient(135deg, #8e7200, #c4a227); }
-      .severity-block.low, .severity-block.info { background: linear-gradient(135deg, #225941, #42916b); }
-      .findings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .finding-card { position: relative; padding-left: 18px; }
-      .finding-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; border-radius: 16px 0 0 16px; background: #9aa8b8; }
+      h1 { font-size: 38px; line-height: 1.08; margin-bottom: 12px; }
+      h2 { font-size: 24px; margin-bottom: 16px; }
+      h3 { font-size: 18px; margin-bottom: 10px; }
+      .muted { color: var(--muted); }
+      .score {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 46px;
+        font-weight: 800;
+        color: #1b2129;
+        background: linear-gradient(135deg, var(--gold), #f2d087);
+        box-shadow: inset 0 0 0 10px rgba(255, 255, 255, 0.2);
+      }
+      .hero-grid, .stats-grid, .focus-grid, .findings-grid, .execution-grid {
+        display: grid;
+        gap: 14px;
+      }
+      .hero-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 18px;
+      }
+      .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .focus-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .findings-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .stat, .summary-box, .focus-card, .finding-card, .tool-card {
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 16px;
+      }
+      .stat strong, .summary-box strong, .focus-card strong {
+        display: block;
+        margin-top: 8px;
+      }
+      .stat strong { font-size: 28px; }
+      .summary-box strong { font-size: 15px; }
+      .focus-card strong { font-size: 30px; }
+      .summary-box span, .focus-card span, .stat span {
+        display: block;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .finding-card {
+        position: relative;
+        padding-left: 20px;
+      }
+      .finding-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 7px;
+        border-radius: 16px 0 0 16px;
+        background: #8ea1b5;
+      }
       .finding-card.critical::before { background: var(--critical); }
       .finding-card.high::before { background: var(--high); }
       .finding-card.medium::before { background: var(--medium); }
       .finding-card.low::before, .finding-card.info::before { background: var(--low); }
-      .severity-pill { display: inline-flex; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-      .severity-pill.critical { color: var(--critical); background: rgba(159,29,29,0.12); }
-      .severity-pill.high { color: var(--high); background: rgba(188,91,4,0.12); }
-      .severity-pill.medium { color: var(--medium); background: rgba(157,122,0,0.12); }
-      .severity-pill.low, .severity-pill.info { color: var(--low); background: rgba(34,100,73,0.12); }
-      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
-      .chip { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: rgba(20,48,74,0.08); font-size: 12px; color: #29445f; }
-      .summary-box span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-      .summary-box strong { display: block; margin-top: 8px; font-size: 15px; }
-      .code { margin-top: 12px; padding: 14px; border-radius: 14px; background: #0f1825; color: #dfe8f3; white-space: pre-wrap; font: 12px/1.55 "IBM Plex Mono", Consolas, monospace; overflow: auto; }
-      .muted { color: var(--muted); }
+      .severity-pill, .chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+      .severity-pill {
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .severity-pill.critical { color: var(--critical); background: rgba(151, 31, 31, 0.12); }
+      .severity-pill.high { color: var(--high); background: rgba(188, 91, 4, 0.12); }
+      .severity-pill.medium { color: var(--medium); background: rgba(157, 122, 0, 0.12); }
+      .severity-pill.low, .severity-pill.info { color: var(--low); background: rgba(34, 100, 73, 0.12); }
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0;
+      }
+      .chip {
+        background: rgba(20, 48, 74, 0.08);
+        color: #28455f;
+      }
+      .finding-metadata {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .code {
+        margin-top: 12px;
+        padding: 14px;
+        border-radius: 14px;
+        background: #101926;
+        color: #dfe8f3;
+        white-space: pre-wrap;
+        font: 12px/1.58 "IBM Plex Mono", Consolas, monospace;
+        overflow: auto;
+      }
+      .report-meta {
+        display: grid;
+        gap: 10px;
+        margin-top: 20px;
+      }
+      @media (max-width: 1100px) {
+        .hero { grid-template-columns: 1fr; }
+        .findings-grid { grid-template-columns: 1fr; }
+        .finding-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
     </style>
   </head>
   <body>
@@ -68,16 +183,20 @@
           <h1>{{ report.executive_summary.headline }}</h1>
           <p class="muted">{{ report.scan.repository_path }}</p>
           <div class="hero-grid">
-            <div class="stat"><span>Findings</span><strong>{{ report.summary.total_findings }}</strong></div>
+            <div class="stat"><span>Total findings</span><strong>{{ report.summary.total_findings }}</strong></div>
             <div class="stat"><span>Critical + high</span><strong>{{ report.executive_summary.critical_and_high }}</strong></div>
             <div class="stat"><span>Dependencies</span><strong>{{ report.summary.dependency_count }}</strong></div>
+          </div>
+          <div class="report-meta">
+            <div class="muted">Bundle: {{ report.report_bundle.name }}</div>
+            <div class="muted">Saved to: {{ report.report_bundle.output_dir }}</div>
           </div>
         </div>
         <div class="hero-side">
           <div class="eyebrow">Repository posture</div>
           <div class="score">{{ report.summary.security_score }}</div>
           <p style="margin-top:16px;">Scan ID {{ report.scan.scan_id }}</p>
-          <p>{{ report.summary.tools_run|length }} tools · {{ report.summary.languages|length }} languages · {{ report.executive_summary.repository_shape.total_files }} files</p>
+          <p>{{ report.summary.tools_run|length }} tools &middot; {{ report.summary.languages|length }} languages &middot; {{ report.executive_summary.repository_shape.total_files }} files</p>
         </div>
       </section>
 
@@ -85,9 +204,9 @@
         <div style="padding:24px;">
           <span class="eyebrow">Severity band</span>
           <h2>Exposure by severity</h2>
-          <div class="severity-band">
+          <div class="stats-grid">
             {% for severity, count in report.summary.severity_distribution.items() %}
-              <div class="severity-block {{ severity }}">
+              <div class="focus-card">
                 <span>{{ severity|upper }}</span>
                 <strong>{{ count }}</strong>
               </div>
@@ -95,6 +214,24 @@
           </div>
         </div>
       </section>
+
+      {% if report.summary.owasp_top_10_distribution %}
+        <section class="panel">
+          <div style="padding:24px;">
+            <span class="eyebrow">OWASP Top 10</span>
+            <h2>Mapped exposure areas</h2>
+            <div class="focus-grid">
+              {% for item in report.summary.owasp_top_10_distribution %}
+                <div class="focus-card">
+                  <span>{{ item.id }}</span>
+                  <strong>{{ item.count }}</strong>
+                  <div class="muted" style="margin-top:8px;">{{ item.title }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      {% endif %}
 
       <section class="panel">
         <div style="padding:24px;">
@@ -111,8 +248,9 @@
                   <span class="chip">{{ finding.category }}</span>
                   <span class="chip">File/line evidence: {{ finding.location.path if finding.location else "n/a" }}{% if finding.location and finding.location.line %}:{{ finding.location.line }}{% endif %}</span>
                   {% if finding.package %}<span class="chip">Dependency/package evidence: {{ finding.package.name }}@{{ finding.package.version or "unknown" }}</span>{% endif %}
+                  {% if finding.owasp_labels %}<span class="chip">OWASP: {{ finding.owasp_labels|join(", ") }}</span>{% endif %}
                 </div>
-                <div class="stats-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+                <div class="finding-metadata">
                   <div class="summary-box">
                     <span>CVE</span>
                     <strong>{{ finding.cve_ids|join(", ") if finding.cve_ids else "none" }}</strong>
@@ -124,6 +262,10 @@
                   <div class="summary-box">
                     <span>CVSS</span>
                     <strong>{{ finding.cvss_score if finding.cvss_score is not none else "n/a" }}</strong>
+                  </div>
+                  <div class="summary-box">
+                    <span>OWASP Top 10</span>
+                    <strong>{{ finding.owasp_labels|join(", ") if finding.owasp_labels else "none" }}</strong>
                   </div>
                 </div>
                 {% if finding.remediation %}
@@ -159,7 +301,7 @@
               {% for tool in report.tool_outputs %}
                 <article class="tool-card">
                   <h3>{{ tool.tool }}</h3>
-                  <p class="muted">Exit {{ tool.exit_code }} · {{ tool.duration_seconds }}s</p>
+                  <p class="muted">Exit {{ tool.exit_code }} &middot; {{ tool.duration_seconds }}s</p>
                   {% if tool.command %}<p><strong>Command:</strong> {{ tool.command|join(" ") }}</p>{% endif %}
                   {% if tool.stdout %}<div class="code">{{ tool.stdout }}</div>{% endif %}
                   {% if tool.stderr %}<div class="code">{{ tool.stderr }}</div>{% endif %}

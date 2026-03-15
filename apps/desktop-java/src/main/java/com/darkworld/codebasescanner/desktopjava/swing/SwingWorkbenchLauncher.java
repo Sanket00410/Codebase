@@ -42,12 +42,14 @@ import javax.swing.table.DefaultTableModel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -84,6 +86,7 @@ public final class SwingWorkbenchLauncher {
     private JLabel reportFolderStatusLabel;
     private JLabel latestArtifactStatusLabel;
     private JLabel generatedReportsStatusLabel;
+    private JLabel selectedArtifactStatusLabel;
     private JPanel reportProfilesPanel;
     private JCheckBox includePlusVariantsCheck;
     private DefaultTableModel scansModel;
@@ -104,6 +107,7 @@ public final class SwingWorkbenchLauncher {
             return;
         }
         FlatDarkLaf.setup();
+        configureTheme();
         System.setProperty("apple.awt.application.name", "Code Base Scanner - Swing");
         SwingUtilities.invokeLater(() -> new SwingWorkbenchLauncher().show());
     }
@@ -124,10 +128,32 @@ public final class SwingWorkbenchLauncher {
         }
     }
 
+    private static void configureTheme() {
+        UIManager.put("Component.arc", 12);
+        UIManager.put("Button.arc", 10);
+        UIManager.put("TextComponent.arc", 10);
+        UIManager.put("ScrollBar.width", 10);
+        UIManager.put("ScrollBar.thumbArc", 999);
+        UIManager.put("Panel.background", new Color(0x101826));
+        UIManager.put("Viewport.background", new Color(0x101826));
+        UIManager.put("Tree.background", new Color(0x101826));
+        UIManager.put("Tree.selectionBackground", new Color(0x1d3050));
+        UIManager.put("Table.background", new Color(0x111a28));
+        UIManager.put("Table.selectionBackground", new Color(0x1d3050));
+        UIManager.put("Table.gridColor", new Color(0x253752));
+        UIManager.put("TextArea.background", new Color(0x131d2e));
+        UIManager.put("TextArea.foreground", new Color(0xecf3ff));
+        UIManager.put("TextField.background", new Color(0x131d2e));
+        UIManager.put("TextField.foreground", new Color(0xecf3ff));
+        UIManager.put("TabbedPane.showTabSeparators", true);
+        UIManager.put("TabbedPane.selectedBackground", new Color(0x1d3050));
+    }
+
     private void show() {
         frame = new JFrame("Code Base Scanner - Swing Workbench");
         frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         frame.setIconImages(DesktopBranding.loadAwtIcons());
+        frame.getContentPane().setBackground(new Color(0x0d1522));
         Rectangle bounds = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         int width = (int) Math.min(1460, Math.max(1160, bounds.getWidth() - 48));
         int height = (int) Math.min(920, Math.max(760, bounds.getHeight() - 56));
@@ -201,8 +227,10 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildTopShell() {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 8, 12));
+        panel.setBackground(new Color(0x0d1522));
 
         JPanel titlePanel = new JPanel(new BorderLayout(12, 4));
+        titlePanel.setOpaque(false);
         JLabel title = new JLabel("Code Base Scanner");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 24f));
         backendStatusLabel = new JLabel("Backend starting...");
@@ -213,6 +241,11 @@ public final class SwingWorkbenchLauncher {
 
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
+        toolBar.setOpaque(false);
+        toolBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0x24324d)),
+                BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
         toolBar.add(makeToolbarButton("Start Scan", this::startScan));
         toolBar.add(makeToolbarButton("Open Repository", this::chooseRepository));
         toolBar.add(makeToolbarButton("Refresh", this::refreshSnapshot));
@@ -227,6 +260,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildWorkspace() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(0, 12, 12, 12));
+        panel.setBackground(new Color(0x0d1522));
 
         navigationTree = new JTree(buildNavigationModel());
         navigationTree.setRootVisible(false);
@@ -273,6 +307,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildOverviewTab() {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        panel.setBackground(new Color(0x101826));
 
         JPanel summaryRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         scoreLabel = createMetricLabel("Score: --");
@@ -303,6 +338,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildFindingsTab() {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        panel.setBackground(new Color(0x101826));
         findingsModel = tableModel("Severity", "Category", "Tool", "Title", "Location");
         findingsTable = new JTable(findingsModel);
         configureDataTable(findingsTable);
@@ -315,6 +351,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildReportsTab() {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        panel.setBackground(new Color(0x101826));
 
         artifactsList = new JList<>();
         artifactsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -361,6 +398,7 @@ public final class SwingWorkbenchLauncher {
         reportFolderStatusLabel = new JLabel("Reports home: " + DesktopPaths.resolveUserReportsDir());
         latestArtifactStatusLabel = new JLabel("Latest bundle: none");
         generatedReportsStatusLabel = new JLabel("Generated reports: --");
+        selectedArtifactStatusLabel = new JLabel("Selected report: none");
 
         JPanel reportSummaryPanel = new JPanel(new GridLayout(0, 1, 0, 6));
         reportSummaryPanel.add(new JLabel("Report output"));
@@ -369,10 +407,15 @@ public final class SwingWorkbenchLauncher {
         reportSummaryPanel.add(latestArtifactStatusLabel);
         reportSummaryPanel.add(generatedReportsStatusLabel);
 
+        JPanel previewPanel = new JPanel(new BorderLayout(0, 10));
+        previewPanel.setBackground(new Color(0x101826));
+        previewPanel.add(selectedArtifactStatusLabel, BorderLayout.NORTH);
+        previewPanel.add(new JScrollPane(reportPreviewArea), BorderLayout.CENTER);
+
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
                 createReportLeftColumn(reportSummaryPanel, profileActions, profilesScroll, new JScrollPane(artifactsList)),
-                createSectionPanel("Preview", new JScrollPane(reportPreviewArea))
+                createSectionPanel("Preview", previewPanel)
         );
         splitPane.setResizeWeight(0.4);
         splitPane.setDividerLocation(430);
@@ -391,6 +434,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildDependenciesTab() {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        panel.setBackground(new Color(0x101826));
         dependenciesModel = tableModel("Package", "Ecosystem", "Version", "Direct");
         dependenciesTable = new JTable(dependenciesModel);
         configureDataTable(dependenciesTable);
@@ -403,6 +447,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildRuntimeTab() {
         JPanel panel = new JPanel(new BorderLayout(12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        panel.setBackground(new Color(0x101826));
         pluginsModel = tableModel("Tool", "Category", "State", "Version");
         pluginsTable = new JTable(pluginsModel);
         configureDataTable(pluginsTable);
@@ -424,6 +469,7 @@ public final class SwingWorkbenchLauncher {
                 BorderFactory.createEmptyBorder(8, 0, 0, 0),
                 BorderFactory.createTitledBorder("Event Console")
         ));
+        panel.setBackground(new Color(0x101826));
         consoleArea = createReadOnlyTextArea();
         consoleArea.setRows(8);
         panel.add(new JScrollPane(consoleArea), BorderLayout.CENTER);
@@ -433,6 +479,7 @@ public final class SwingWorkbenchLauncher {
     private JPanel buildStatusBar() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 6));
         panel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UIManager.getColor("Component.borderColor")));
+        panel.setBackground(new Color(0x0d1522));
         panel.add(new JLabel("Java rewrite path: Swing + JavaFX"));
         panel.add(new JLabel("Backend: 127.0.0.1:8686"));
         panel.add(new JLabel("Repo root: " + repositoryRoot));
@@ -624,6 +671,7 @@ public final class SwingWorkbenchLauncher {
         } else {
             latestArtifactStatusLabel.setText("Latest bundle: none");
             generatedReportsStatusLabel.setText("Generated reports: --");
+            selectedArtifactStatusLabel.setText("Selected report: none");
         }
 
         currentPlugins = latest.plugins();
@@ -715,6 +763,7 @@ public final class SwingWorkbenchLauncher {
         if (artifact == null) {
             return;
         }
+        selectedArtifactStatusLabel.setText("Selected report: " + ReportArtifactSupport.displayName(artifact));
         inspectorArea.setText(WorkbenchText.formatArtifactDetails(artifact));
         reportPreviewArea.setText(LocalFilePreviewer.filePreview(artifact.path(), 120_000, 320));
     }
@@ -790,6 +839,7 @@ public final class SwingWorkbenchLauncher {
 
     private JPanel createSectionPanel(String title, Component content) {
         JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(new Color(0x101826));
         panel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createTitledBorder(title),
                 BorderFactory.createEmptyBorder(8, 8, 8, 8)
@@ -872,6 +922,11 @@ public final class SwingWorkbenchLauncher {
         area.setLineWrap(true);
         area.setWrapStyleWord(true);
         area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        area.setMargin(new Insets(10, 12, 10, 12));
+        area.setBackground(new Color(0x131d2e));
+        area.setForeground(new Color(0xecf3ff));
+        area.setCaretColor(new Color(0xecf3ff));
+        area.setSelectionColor(new Color(0x3059b9));
         return area;
     }
 
@@ -888,6 +943,9 @@ public final class SwingWorkbenchLauncher {
         table.setRowHeight(28);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
         table.setFillsViewportHeight(true);
+        table.setAutoCreateRowSorter(true);
+        table.setShowVerticalLines(false);
+        table.setShowHorizontalLines(true);
     }
 
     private <T> void runBackground(String activity, Callable<T> task, Consumer<T> onSuccess) {

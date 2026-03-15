@@ -96,6 +96,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
     private Label reportFolderLabel;
     private Label latestArtifactLabel;
     private Label generatedReportsLabel;
+    private Label selectedArtifactLabel;
     private VBox reportProfilesBox;
     private CheckBox includePlusVariantsCheck;
 
@@ -450,6 +451,7 @@ public final class JavaFxWorkbenchLauncher extends Application {
             if (newValue == null) {
                 return;
             }
+            selectedArtifactLabel.setText("Selected report: " + ReportArtifactSupport.displayName(newValue));
             inspectorArea.setText(WorkbenchText.formatArtifactDetails(newValue));
             reportPreviewArea.setText(LocalFilePreviewer.filePreview(newValue.path(), 120_000, 320));
         });
@@ -475,6 +477,8 @@ public final class JavaFxWorkbenchLauncher extends Application {
         latestArtifactLabel.getStyleClass().add("status-line");
         generatedReportsLabel = new Label("Generated reports: --");
         generatedReportsLabel.getStyleClass().add("status-line");
+        selectedArtifactLabel = new Label("Selected report: none");
+        selectedArtifactLabel.getStyleClass().add("status-line");
         Button selectRecommendedButton = actionButton("Recommended", this::selectRecommendedReportProfiles);
         Button selectAllButton = actionButton("All Profiles", this::selectAllReportProfiles);
         FlowPane profileActions = new FlowPane(8, 8, selectRecommendedButton, selectAllButton);
@@ -502,7 +506,10 @@ public final class JavaFxWorkbenchLauncher extends Application {
         );
         leftColumn.getStyleClass().add("report-left-column");
         VBox.setVgrow(artifactsList, Priority.ALWAYS);
-        SplitPane split = new SplitPane(leftColumn, reportPreviewArea);
+        VBox previewColumn = new VBox(10, selectedArtifactLabel, reportPreviewArea);
+        previewColumn.getStyleClass().add("report-left-column");
+        VBox.setVgrow(reportPreviewArea, Priority.ALWAYS);
+        SplitPane split = new SplitPane(leftColumn, previewColumn);
         split.getStyleClass().add("report-split");
         split.setDividerPositions(0.36);
 
@@ -860,6 +867,9 @@ public final class JavaFxWorkbenchLauncher extends Application {
                             () -> artifactsList.getSelectionModel().select(0)
                     );
         } else {
+            if (selectedArtifactLabel != null) {
+                selectedArtifactLabel.setText("Selected report: none");
+            }
             reportPreviewArea.setText("No report artifacts are attached to the active scan yet.");
         }
         if (!currentPlugins.isEmpty()) {
